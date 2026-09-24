@@ -1,5 +1,6 @@
 /**
- * 观测地选择（v2.0.0 建；v2.3.0 扩到全国；v2.3.3 加省份 Tab ＋ 城市网格）
+ * 观测地选择（v2.0.0 建；v2.3.0 扩到全国；v2.3.3 加省份 Tab ＋ 城市网格；v2.3.5 加定位双守卫；
+ *           v2.3.6 网格移出首页 ＋ localStorage 承接）
  *
  * 做什么
  * ──────
@@ -14,6 +15,45 @@
  * 服务端只渲染**锚点**（340 个，预计算过升落的那些）⇒ 基础页面小、且**无 JS 也能用**。
  * 本脚本再取一次 `assets/places-cn.json`（全站共享、可缓存的静态资源），
  * 把 **2,870 个县级可选点**并入下拉（按省分组）。
+ *
+ * v2.3.5 新增：**自动定位双守卫**（改的是「判据」，不是就近算法本身）
+ * ──────────────────────────────────────────────────────────
+ * 症状：① 开代理／在境外网络访问 → 观测地自动跳到「吉林延边朝鲜族州」等边城；
+ *       ② 关代理但仍跳错（如人在揭阳、跳到深圳）。
+ * 根因：定位接口给的是**访问者出口 IP**，不是本人位置。而旧代码
+ *       (a) 不问国别，(b) 不问省份，(c) 不比距离 ⇒ 把「最近的锚点」直接当本地结果上报。
+ * 取证：ipwho.is 实测返回 country_code=CN / city=Shenzhen / 22.5445,114.0545；
+ *       出口 IP 登记在深圳而人在揭阳，是运营商常见现象（宽带出口在省网节点）。
+ *       ★ 纯距离阈值**救不了**这一个：340 锚点真实稀疏区下界是阿里 512.6 km，
+ *         而揭阳→深圳只有 261.7 km —— 想挡住深圳就得压到 250 km 以下，
+ *         那阿里的正常用户会被误拦。**一个数字没法两头兼顾**，故改用省份校验。
+ * 修法：两道守卫 ＋ 一键采用 ——
+ *   ① **境外守卫**：country 非 'CN'（或未知）⇒ 不套用，只提示；
+ *   ② **跨省守卫**：IP 报的省 ≠ 命中锚点所在省 ⇒ **不自动改城**，只提示 ＋ 给「采用」按钮；
+ *   ③ 同省 ⇒ 正常套用（「同省内最近」在语义上是站得住的）。
+ * ★ 为什么跨省只提示、不硬拦：出口 IP 与本机不同省既可能是运营商常态、也可能是真异地，
+ *   代码分不清 ⇒ 不该替读者决定。**判据不足时，把决定权交回读者，而不是猜。**
+ *
+ * v2.3.6 新增：**网格移出首页 ＋ 选择结果跨页承接**
+ * ────────────────────────────────────────────────
+ * 背景（用户令）：「这个界面太长了，不行！…… 首页首屏仅保留『当前选中城市』以及
+ *   『按我的位置』按钮。将『两级联动省份标签+城市网格面板』完全移出首页。」
+ * 实测：线上首页 HTML 205,161 字符，城市相关（340 option / 34 radio / 34 tab / 35 pane /
+ *   41,007 字符载荷）约 100 KB、占 49%。
+ *
+ * 改法（**不新增数据路径**）：
+ *   ① 首页 astro-today.php 里那整块网格删掉，只留 select（视觉隐藏）＋ 按我的位置 ＋
+ *      「切换观测地」小链接；
+ *   ② 网格改由 templates/astro-places.php（挂 [astro_places_hub] 的独立页）渲染，
+ *      仍由本文件的 buildGrid() 绑定、仍只做「替读者动 select」；
+ *   ③ 两页不在同一 DOM ⇒ 独立页选完后把选择写进 localStorage（键 KCJ_STORE），
+ *      **跳回来源页**；首页在 init() 里、**定位之前**先读它。
+ *
+ * ★ 为什么用 localStorage 而不是 URL 参数：
+ *   换城不换 URL 是本项目既定纪律（v2.3.3）。走 ?place= 会把观测地永久留在地址栏，
+ *   被收藏与转发 —— 那正是「把居住地结构化公开」的一种形式，与用户意见④被拦下同理。
+ * ★ 为什么读在「定位之前」：手动选择优先于自动定位是第③条硬约束。
+ *   读者专程去独立页选了一次城，回来却被 IP 定位覆盖掉，等于白选。
  *
  * v2.3.3 新增：**省份 Tab ＋ 城市网格**（只为好点，不改数据路径）
  * ──────────────────────────────────────────────────────────
@@ -54,6 +94,11 @@
 (function () {
   'use strict';
 
+  // 跨页承接的存储键（与 includes/shortcodes.php 的 kcj_astro_place_store_key() 必须一致）
+  var KCJ_STORE = 'kcj_astro_place';
+  // 本次会话里是否「读者在独立页明确选过城」—— 选过就不再自动覆盖（手动优先）
+  var stored_once = false;
+
   var EPS_KM = 111.2;   // 平面近似：纬度方向每度约 111.2 km（与 Python 侧 nearest_city 同一常数）
 
   // 紧凑载荷的列序（与 templates/astro-today.php 的 $rows_out 一一对应）
@@ -61,6 +106,8 @@
   var F_SUNRISE = 4, F_SUNSET = 5, F_DAYLEN = 6;
   var F_TC0 = 7, F_TC1 = 8, F_TN0 = 9, F_TN1 = 10, F_TA0 = 11, F_TA1 = 12;
   var F_MOONRISE = 13, F_MOONSET = 14;
+  // ★ v2.3.5：第 16、17 项 —— 命中锚点所属省的 adcode 与省名（跨省守卫用）
+  var F_PROV = 15, F_PROVN = 16;
 
   // data-kcj-f 属性 → 载荷列（成对的晨昏列各自展开）
   var SLOT = {
@@ -120,7 +167,8 @@
     return Math.sqrt(dx * dx + dy * dy);
   }
 
-  /** 最近锚点 → { key, km }；坐标不全或表为空返回 null */
+  /** 最近锚点 → { key, km, prov, provCn }；坐标不全或表为空返回 null。
+   *  ★ v2.3.5：一并带出该锚点**所属省的 adcode 与省名**，供跨省守卫比对。 */
   function nearest(island, lat, lon) {
     var best = null;
     var bestD = null;
@@ -134,7 +182,27 @@
       if (d < bestD) { best = k; bestD = d; }
     }
     if (best === null) { return null; }
-    return { key: best, km: Math.round(bestD) };
+    var row = island.index[best];
+    return { key: best, km: Math.round(bestD),
+             prov: row[F_PROV] || '', provCn: row[F_PROVN] || '' };
+  }
+
+
+  /* ── v2.3.6：跨页承接 ──────────────────────────────────────────────
+   * 独立页（[astro_places_hub]）与首页不在同一 DOM，故选择结果经 localStorage 过渡。
+   * ★ 一律 try/catch：隐私模式／被策略禁用时 localStorage 会抛异常，
+   *   此时**静默回落**（定位照旧、页面照旧），绝不因为存储不可用而让整块脚本失效。
+   */
+  function readStore() {
+    try {
+      var v = window.localStorage.getItem(KCJ_STORE);
+      if (!v) { return ''; }
+      return String(v);
+    } catch (e) { return ''; }
+  }
+
+  function writeStore(key) {
+    try { window.localStorage.setItem(KCJ_STORE, String(key)); } catch (e) {}
   }
 
   function txt(v) {
@@ -166,9 +234,27 @@
     return true;
   }
 
-  function setStatus(root, text) {
+  /**
+   * 写状态行。text 为 null 时只清按钮、不动文字（供「先清后设」用）。
+   *
+   * ★ v2.3.5 加第 3、4 个参数：跨省时给一个「仍改用 X」按钮 ——
+   *   **提示不等于挡路**：读了提示仍想用得顺手，一步就能改。
+   *   采用动作需要 apply/island/sel/syncGrid，故由调用方把**回调**传进来
+   *   （onAdopt），本函数只管渲染，不反查全局状态。
+   */
+  function setStatus(root, text, adoptLabel, onAdopt) {
     var s = root.querySelector('.kcj-astro-place-status');
-    if (s) { s.textContent = text; }
+    if (!s) { return; }
+    if (typeof text === 'string') { s.textContent = text; }
+    var old = s.querySelector('.kcj-astro-place-adopt');
+    if (old) { s.removeChild(old); }
+    if (!adoptLabel || !onAdopt) { return; }
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'kcj-astro-place-adopt';
+    b.textContent = adoptLabel;
+    b.addEventListener('click', function () { onAdopt(); });
+    s.appendChild(b);
   }
 
   /**
@@ -348,10 +434,131 @@
     if (radio) { radio.checked = true; }
   }
 
-  /** 依序问两个公开接口。两者都返回 latitude/longitude。全失败回调 null（调用方静默回落）。 */
+
+  /**
+   * v2.3.6：绑定**观测地总览页**的网格（[astro_places_hub]）。
+   *
+   * 与 buildGrid() 的分工：
+   *   · buildGrid(root, sel)   —— root = .kcj-astro-today，sel 是**本页**的隐藏 select
+   *                               （首页：点完就地换数据，不跳页）
+   *   · bindHubGrid(root, sel) —— root = .kcj-astro-places-hub，sel 是**本页**的平铺 select
+   *                               （独立页：点完落盘 ＋ 跳回来源页，因为数据不在这页）
+   *
+   * ★ 两者都**不做自己的选择逻辑** —— 只做「替读者动 select」＋ 派发 change。
+   *   独立页的 change 监听器负责落盘与跳转，故这里派发的事件会被它接住，闭环且幂等。
+   */
+  function bindHubGrid(root, sel) {
+    var grid = root.querySelector('.kcj-astro-place-grid');
+    if (!grid) { return false; }
+    if (grid.getAttribute('data-kcj-bound') === '1') { return false; }
+    var cells = grid.querySelectorAll('.kcj-astro-place-city');
+    if (!cells.length) { return false; }
+    Array.prototype.forEach.call(cells, function (btn) {
+      btn.addEventListener('click', function () {
+        var key = btn.getAttribute('data-anchor') || '';
+        if (!key) { return; }
+        if (!sel.querySelector('option[value="' + key + '"]')) { return; }
+        sel.value = key;
+        sel.dispatchEvent(new Event('change'));
+      });
+    });
+    grid.setAttribute('data-kcj-bound', '1');
+    return true;
+  }
+
+  /** 独立页自己的同步：只标 aria-pressed、开对应省的 Tab（没有 select 可动） */
+  function syncHubGrid(root, cn) {
+    var grid = root.querySelector('.kcj-astro-place-grid');
+    if (!grid) { return; }
+    var cells = grid.querySelectorAll('.kcj-astro-place-city');
+    var hit = null;
+    Array.prototype.forEach.call(cells, function (btn) {
+      var isMe = btn.textContent === cn;
+      btn.setAttribute('aria-pressed', isMe ? 'true' : 'false');
+      if (isMe) { hit = btn; }
+    });
+    if (!hit) { return; }
+    var pane = hit.parentNode;
+    if (!pane) { return; }
+    var gi = pane.getAttribute('data-gi');
+    var radio = grid.querySelector('.kcj-astro-place-pradio[data-gi="' + gi + '"]');
+    if (radio) { radio.checked = true; }
+  }
+
+  /**
+   * v2.3.6：观测地总览页的初始化（独立于 init()，因为那一套全程围绕 .kcj-astro-today）。
+   * 该页**没有**今日天象数据，故不 apply、不定位 —— 只做：读存档、点格落盘、跳回。
+   */
+  function initHub() {
+    var hubs = document.querySelectorAll('.kcj-astro-places-hub');
+    if (!hubs.length) { return; }
+    Array.prototype.forEach.call(hubs, function (root) {
+      if (root.getAttribute('data-kcj-init') === '1') { return; }
+      root.setAttribute('data-kcj-init', '1');
+      var sel = root.querySelector('.kcj-astro-place-select');
+      if (!sel) { return; }
+      var storeKey = root.getAttribute('data-kcj-store') || KCJ_STORE;
+      var backUrl = root.getAttribute('data-kcj-hub-url') || '';
+      // 来源页：优先 referrer（读者从哪来就回哪去），取不到退回站点首页
+      var from = '';
+      try { from = document.referrer || ''; } catch (e) { from = ''; }
+      if (!from) { from = root.getAttribute('data-kcj-home') || '/'; }
+
+      // 存档回填：读者上次选的城，本页也要亮着（否则「当前观测地」与格子自相矛盾）
+      var saved = readStore();
+      if (saved) {
+        if (sel.querySelector('option[value="' + saved + '"]')) { sel.value = saved; }
+        var opt = sel.options[sel.selectedIndex];
+        if (opt) { syncHubGrid(root, opt.textContent); }
+      }
+
+      function commit(key, cn, go) {
+        writeStore(key);
+        var st = root.querySelector('.kcj-astro-place-status');
+        if (st) { st.textContent = '已记下观测地：「' + cn + '」' + (go ? '，正在返回…' : '。'); }
+        if (go) {
+          try { window.location.assign(from); } catch (e2) {}
+        }
+      }
+
+      sel.addEventListener('change', function () {
+        var opt = sel.options[sel.selectedIndex];
+        if (!opt) { return; }
+        var key = opt.getAttribute('data-anchor') || '';
+        if (!key) { return; }
+        syncHubGrid(root, opt.textContent);
+        commit(key, opt.textContent, true);
+      });
+
+      bindHubGrid(root, sel);
+      // 无 JS 时 <form method="get"> 会把 ?<select name> 提交回本页 —— 服务端读它即可生效。
+      //   ★ 但本页的 select **没有 name**（不给地址栏留观测地），故无 JS 时点「查看」
+      //     只是刷新 + 保留选择，属**已知降级**，页面上已如实说明。此处补一条：
+      //     有 JS 时把 form 的提交拦下，改为落盘＋跳回（避免无意义刷新）。
+      var form = root.querySelector('.kcj-astro-places-form');
+      if (form) {
+        form.addEventListener('submit', function (ev) {
+          var opt = sel.options[sel.selectedIndex];
+          if (!opt) { return; }
+          var key = opt.getAttribute('data-anchor') || '';
+          if (!key) { return; }
+          ev.preventDefault();
+          commit(key, opt.textContent, true);
+        });
+      }
+    });
+  }
+
+  /** 依序问两个公开接口。两者都返回 latitude/longitude。全失败回调 null（调用方静默回落）。
+   *  ★ v2.3.5：**必须同时问国别**（country_code）—— 不问国别时，代理／境外网络的出口 IP
+   *    会被当成本地起点，去和 340 个中国锚点比近，结果落在一个境内边城（如延边）。
+   *    ipwho.is 走 `fields`（`country_code` 与 `region` 均可指定）；
+   *    ipapi.co/json/ 原生带 `country_code` 与 `region_code`，无需额外参数。
+   *  ★ `region` 用作跨省守卫的第二重证据：IP 报的省名与命中锚点所在省名比对。
+   *    实测 ipwho.is 的 region 给中文省名（如「广东」），与本目录省名「广东省」可互含匹配。 */
   function locate(cb) {
     var urls = [
-      'https://ipwho.is/?fields=latitude,longitude,city',
+      'https://ipwho.is/?fields=latitude,longitude,city,country_code,region',
       'https://ipapi.co/json/'
     ];
     var i = 0;
@@ -379,13 +586,89 @@
         var lon = parseFloat(j.longitude);
         if (isNaN(lat)) { step(); return; }
         if (isNaN(lon)) { step(); return; }
-        cb({ lat: lat, lon: lon, city: j.city || '' });
+        // 国别：取不到就留空串 —— 空串按「未知」处理，**不当作中国**（宁可不套用）。
+        var cc = '';
+        if (j.country_code) { cc = String(j.country_code).toUpperCase(); }
+        // 省：ipwho.is 给 region（中文省名）；ipapi.co 给 region（英文）与 region_code（数字串）。
+        var rg = '';
+        if (j.region) { rg = String(j.region); }
+        // ★ 铁律：整份脚本不出现裸与号（平台后处理会替换成实体、拆断脚本）
+        //   ⇒ 一律用嵌套 if，绝不写连续两个与号。
+        if (!rg) {
+          if (j.region_code) { rg = String(j.region_code); }
+        }
+        cb({ lat: lat, lon: lon, city: j.city || '', country: cc, region: rg });
       }).catch(function () {
         if (timer) { clearTimeout(timer); }
         step();
       });
     }
     step();
+  }
+
+  /** 省名归一：去掉「省／市／自治区／特别行政区／壮族／回族／维吾尔／自治州」等后缀，
+   *  取前两字做粗比对（「广东」vs「广东省」→ 同；「内蒙古」vs「内蒙古自治区」→ 同）。
+   *  ★ 取前两字是**有意从宽**：这里只用来判「是不是明显不同省」，
+   *    宁可漏拦（同省被当不同省 → 多一次提示，无害），不可误拦（不同省被当同省 → 悄悄改城，有害）。
+   *    等等 —— 方向反了：从宽会**漏拦**。故再叠一层「互含」判据：
+   *    两串任一方含另一方的前两字即算同省；都不含 ⇒ 判为不同省。 */
+  function sameRegion(a, b) {
+    if (!a || !b) { return true; }   // 缺省 ⇒ 不拦（缺证据时不制造提示）
+    var x = String(a), y = String(b);
+    var x2 = x.substring(0, 2), y2 = y.substring(0, 2);
+    if (x.indexOf(y2) >= 0) { return true; }
+    if (y.indexOf(x2) >= 0) { return true; }
+    return false;
+  }
+
+  /**
+   * 自动定位的**唯一**文案出口（v2.3.5）。三个调用点共用，免得三处文案各改各的。
+   *
+   * 返回一个对象：{ applied: 是否已改城, key: 建议的锚点, km, anchorCn }
+   *   · applied true  ⇒ 已套用（调用方回写网格）
+   *   · applied false ⇒ 仅提示；若 key 有值，另给「采用」按钮（一键改用该地）
+   *
+   * 三态（★ 一律如实，不假装成功）：
+   *   ① country 非 CN ／ 未知  ⇒ 「未能识别为国内位置」＋接口报的城市，**不套用**
+   *   ② 境内但跨省           ⇒ 「据 IP 判断你在 X 省，与当前观测地 Y 省不一致」，
+   *                              **不套用**，给「采用该地」按钮
+   *   ③ 同省命中             ⇒ 套用，并写出接口报的城市与直线距离
+   */
+  function autoApply(root, island, sel, hit, tail, adoptNow) {
+    var n = nearest(island, hit.lat, hit.lon);
+    if (!n) {
+      setStatus(root, '未能取得可用坐标，已保持当前观测地。');
+      return { applied: false };
+    }
+    var anchorCn = island.index[n.key][F_CN];
+    var curKey = island.cur;
+    var curCn = island.index[curKey] ? island.index[curKey][F_CN] : '默认观测地';
+    var from = hit.city ? ('（IP 报城市：' + hit.city + '）') : '';
+
+    // 态一：不在中国境内（或拿不到国别 —— 缺证据时同样不套用）
+    if (hit.country !== 'CN') {
+      var w = hit.country ? ('IP 报所在国家／地区代码：' + hit.country) : 'IP 未给出国家／地区';
+      setStatus(root, '未能识别为国内位置' + from + '，' + w
+        + '，已保持当前观测地（' + curCn + '）。如需改用他地，请在上方手动选择。');
+      return { applied: false };
+    }
+
+    // 态二：境内，但 IP 报的省与命中锚点所在省不一致
+    var ipRegion = hit.region || '';
+    if (!sameRegion(ipRegion, n.provCn)) {
+      setStatus(root, '据 IP 判断你在「' + (ipRegion || '未知')
+        + '」，与最近的预置观测地「' + anchorCn + '」（' + n.provCn
+        + '）不在同一省，直线距离约 ' + n.km
+        + ' 千米。为免误判，已保持当前观测地（' + curCn + '）。',
+        '仍改用「' + anchorCn + '」', adoptNow);
+      return { applied: false, key: n.key, km: n.km, anchorCn: anchorCn };
+    }
+
+    // 态三：同省 ⇒ 正常命中
+    if (!apply(root, island, n.key)) { return { applied: false }; }
+    setStatus(root, '已按访问位置选最近的预置观测地：' + anchorCn
+      + from + '（直线距离约 ' + n.km + ' 千米）' + (tail || ''));
+    return { applied: true, key: n.key, km: n.km, anchorCn: anchorCn };
   }
 
   /** 把「当前选中的是哪一项」写成一句如实的话（含锚点与距离） */
@@ -427,16 +710,19 @@
           var anchor = opt ? opt.getAttribute('data-anchor') : '';
           if (!anchor) { return; }
           if (apply(root, island, anchor)) {
+            // ★ v2.3.6：手动改选即落盘 —— 独立页/本页选过，后续自动定位不再覆盖（手动优先）
+            writeStore(anchor);
+            stored_once = true;
             setStatus(root, describe(root, island, sel));
-            // ★ v2.3.2：网格是 select 的视觉面，select 一动网格必须跟着动。
+            // ★ v2.3.3：网格是 select 的视觉面，select 一动网格必须跟着动。
             //   （网格点击 → 派发 change → 到这里 → 再同步回网格，是闭环且幂等的。）
             syncGrid(root, island, anchor);
           }
         });
-        // ★ v2.3.2：把省份 Tab ＋ 城市网格接到 select 上（在升级之前绑定即可 ——
+        // ★ v2.3.3：把省份 Tab ＋ 城市网格接到 select 上（在升级之前绑定即可 ——
         //   格子是服务端渲染的，不随 upgradeSelect 变化）。
         buildGrid(root, sel);
-
+        // 增量升级为「省 → 市 → 县/区」；取不到目录就保持锚点下拉（完整可用）
         loadCatalog(catUrl, function (cat) {
           if (!cat) { return; }
           if (!upgradeSelect(root, island, cat)) { return; }
@@ -454,22 +740,26 @@
         btn.addEventListener('click', function () {
           manual = false;
           setStatus(root, '正在按访问位置选择最近的预置观测地…');
+          // ★ v2.3.5：跨省时的「仍改用 X」按钮动作 = 套用 ＋ 回写下拉与网格。
+          //   与态三走的是同一条落点，只是在读者确认后才执行。
+          function adoptTarget(key) {
+            if (!apply(root, island, key)) { return; }
+            manual = true;
+            if (sel) {
+              if (sel.querySelector('option[value="' + key + '"]')) { sel.value = key; }
+            }
+            syncGrid(root, island, key);
+            setStatus(root, '已改用「' + island.index[key][F_CN] + '」。');
+          }
           locate(function (hit) {
             if (!hit) {
               setStatus(root, '定位失败（接口不可达或被浏览器拦截），已保持当前观测地。');
               return;
             }
-            var n = nearest(island, hit.lat, hit.lon);
-            if (!n) { setStatus(root, '定位失败，已保持当前观测地。'); return; }
-            manual = true;   // 用户主动点过，视为显式选择
-            if (!apply(root, island, n.key)) { return; }
-            if (sel) {
-              if (sel.querySelector('option[value="' + n.key + '"]')) { sel.value = n.key; }
-            }
-            // v2.3.2：定位结果也要回写网格（否则格子还亮在原城，界面自相矛盾）
-            syncGrid(root, island, n.key);
-            setStatus(root, '已按访问位置选最近的预置观测地：'
-              + island.index[n.key][F_CN] + '（直线距离约 ' + n.km + ' 千米）。');
+            // ★ v2.3.5：manual 只在**真的改了城**时才置位 ——
+            //   否则一次「仅提示」的点击会把后续自动定位永久挡掉（读者只是想知道自己在哪）。
+            var res = autoApply(root, island, sel, hit, '。',
+              function () { adoptTarget(res.key); });
           });
         });
       }
@@ -477,40 +767,76 @@
       if (island.mode === 'auto') { autoRoots.push(root); }
     });
 
+    // ★ v2.3.6：**定位之前**先把「独立页选过的城」应用上 ——
+    //   手动选择优先于自动定位（第③条硬约束）。读者专程去独立页选了一次，
+    //   回来若被 IP 定位覆盖，等于白选（且会让「已在深圳」这类误判反复出现）。
+    //   ⇒ 有存档就应用 ＋ 把 autoRoots 清空（不再跑自动定位）。
+    var saved = readStore();
+    if (saved) {
+      var used = false;
+      Array.prototype.forEach.call(autoRoots, function (root) {
+        var isl = parseIsland(root);
+        if (!isl) { return; }
+        if (!isl.index[saved]) { return; }
+        if (!apply(root, isl, saved)) { return; }
+        var sl = root.querySelector('.kcj-astro-place-select');
+        if (sl) {
+          if (sl.querySelector('option[value="' + saved + '"]')) { sl.value = saved; }
+        }
+        syncGrid(root, isl, saved);
+        setStatus(root, describe(root, isl, sl));
+        used = true;
+      });
+      if (used) {
+        stored_once = true;
+        autoRoots = [];
+      }
+    }
+
     if (!autoRoots.length) { return; }
     locate(function (hit) {
       if (!hit) {
         Array.prototype.forEach.call(autoRoots, function (root) {
-          setStatus(root, '未能自动定位，已按默认观测地显示；可在上方下拉里改选。');
+          setStatus(root, '未能自动定位（接口不可达或被浏览器拦截），'
+            + '已按当前观测地显示；可在上方下拉里改选。');
         });
         return;
       }
       Array.prototype.forEach.call(autoRoots, function (root) {
         var island = parseIsland(root);
         if (!island) { return; }
-        var n = nearest(island, hit.lat, hit.lon);
-        if (!n) { return; }
+        // ★ v2.3.6：以「此刻页面上真正生效的城」为准（archived 或服务端默认），
+        //   而不是载荷里的 island.cur —— 前者可能已被 localStorage 改过。
+        var liveCur = root.getAttribute('data-kcj-place-cur') || '';
+        if (liveCur) { island.cur = liveCur; }
         var sel = root.querySelector('.kcj-astro-place-select');
         var opted = false;
         if (sel) {
           opted = sel.getAttribute('data-kcj-upgraded') === '1';
         }
-        if (!apply(root, island, n.key)) { return; }
-        if (sel) {
-          if (sel.querySelector('option[value="' + n.key + '"]')) { sel.value = n.key; }
-        }
-        // v2.3.2：自动定位结果回写网格（同上）
-        syncGrid(root, island, n.key);
         // 说明句要区分「下拉已升级为全国县级」与「只有锚点」两种情况，
         // 否则读者会以为「我所在的区县没被收录」。
         var tail = opted
           ? '；可展开下拉改选到市/县/区。'
           : '；可手动改选。';
-        setStatus(root, '已按访问位置选最近的预置观测地：'
-          + island.index[n.key][F_CN] + '（直线距离约 ' + n.km + ' 千米）' + tail);
+        // ★ v2.3.5：套用与文案全部交给 autoApply（三态集中一处）；
+        //   跨省时只提示 ＋ 给按钮，不静默改城。
+        function adoptAuto(key) {
+          if (!apply(root, island, key)) { return; }
+          if (sel) {
+            if (sel.querySelector('option[value="' + key + '"]')) { sel.value = key; }
+          }
+          syncGrid(root, island, key);
+          setStatus(root, '已改用「' + island.index[key][F_CN] + '」' + tail);
+        }
+        var res = autoApply(root, island, sel, hit, tail,
+          function () { adoptAuto(res.key); });
       });
     });
   }
 
-  ready(init);
+  ready(function () {
+    init();      // 今日天象板块（首页/栏目页）
+    initHub();   // 观测地总览页（v2.3.6 独立页）
+  });
 })();

@@ -1,6 +1,6 @@
 <?php
 /**
- * 短代码层（指令 05；v2.0.0 扩到 5 个）
+ * 短代码层（指令 05；v2.0.0 扩到 5 个；v2.3.6 加观测地总览页，共 6 个）
  *
  * 五个短代码：
  *   1. [astro_today date="YYYY-MM-DD" place="auto|城市键|off"]   今日天象板块
@@ -14,6 +14,8 @@
  *   3. [astro_related_events id="N"]           古今对照模块（同类型历史/未来天象）
  *   4. [astro_history_today date="MM-DD"]      **历史上今日天象**（同月同日的日月食，按年倒序）
  *   5. [astro_forecast_report period="month|quarter|year|next12"]  **月/季/年度报告**（页面展示 ＋ 下载）
+ *
+ *   6. [astro_places_hub title=""]           **观测地总览页**（v2.3.6；省份 Tab ＋ 城市网格的独立落点）
  *
  * 另保留 [astro_event_detail id="N"]（v1.1.0 旧名）——详情页模板与它共用同一渲染块，
  * 不删是为了不让已写好的页面失效；新页面请用 single-astro_event.php 或 [astro_related_events]。
@@ -94,6 +96,40 @@ function kcj_astro_places_expected() {
 }
 
 /**
+ * 「锚点 key → 省 adcode」（v2.3.5 新增）。
+ * 供前端「跨省守卫」用：IP 报的省与命中锚点所在省不一致时，不下自动结论、只提示。
+ * 数据源同 `kcj_astro_places_catalog()`，`anchors[i][2]` 即省 adcode（实测 34 种、末四位 0000）。
+ * ★ 为什么在前端判而不是在 PHP 判：定位结果只有浏览器拿得到（IP 接口是前端调的），
+ *   PHP 无从知道访问者在哪个省。故 PHP 只提供**映射表**，判定交给 JS。
+ */
+function kcj_astro_place_prov_map() {
+    static $m = null;
+    if ($m !== null) {
+        return $m;
+    }
+    $m = array();
+    $c = kcj_astro_places_catalog();
+    if (!$c) {
+        return $m;
+    }
+    $pname = array();
+    foreach ((array) $c['provinces'] as $p) {
+        if (isset($p[0])) {
+            $pname[(string) $p[0]] = (string) (isset($p[1]) ? $p[1] : $p[0]);
+        }
+    }
+    foreach ((array) $c['anchors'] as $a) {
+        $key  = isset($a[0]) ? (string) $a[0] : '';
+        $prov = isset($a[2]) ? (string) $a[2] : '';
+        if ($key === '' || $prov === '') {
+            continue;
+        }
+        $m[$key] = array('p' => $prov, 'n' => isset($pname[$prov]) ? $pname[$prov] : $prov);
+    }
+    return $m;
+}
+
+/**
  * 「省 → 该省锚点」分组，顺序照目录原序（＝官方 subFeatureIndex 顺序，华北→西南→港澳台）。
  * 返回 array( prov_adcode => array('name' => 省名, 'items' => array( key => cn )) )
  */
@@ -169,6 +205,148 @@ function kcj_astro_notice($text, $cls = 'kcj-astro-nodata') {
     return '<p class="' . esc_attr($cls) . '">' . esc_html($text) . '</p>';
 }
 
+/* -------------------------------------------------------------------------
+ * 短代码 8：观测地总览页（v2.3.6）
+ *
+ * 为什么单出一页（用户原话）：
+ *   「这个界面太长了，不行！…… 首页首屏仅保留『当前选中城市』以及『按我的位置』按钮。
+ *     将『两级联动省份标签+城市网格面板』完全移出首页，单独做成一个独立的 WordPress 页面。」
+ *
+ * 实测依据：线上首页 HTML 205,161 字符，其中城市相关（340 个 <option>、34 个 radio、
+ *   34 个 tab、35 个 pane、41,007 字符载荷 JSON）约 100 KB、占 49%。
+ *   ⇒ 首页被这团「城市文本」压得首屏全是字，正文与学术关键词被稀释。
+ *
+ * ★ 本页**不引入第二套数据路径**：
+ *   网格仍由 assets/astro-place.js 的 buildGrid() 绑定，点击仍只做「替读者动 select」
+ *   （value ＋ 派发 change）。本页的 select 是**本页自己的**，只用来承载「读者点的是哪一格」，
+ *   真正的数据渲染发生在首页（或任何放了 [astro_today] 的页）——
+ *   故本页选完城后写 localStorage（键 KCJ_PLACE_STORE）并**跳回来源页**。
+ *
+ * ★ 为什么不用伪静态 /observatories/<城市>/（用户意见④）：
+ *   那会让 341 个城市各自成为一个**可索引 URL**，等于把「邝楚嘉在揭阳」结构化公开
+ *   —— 与「不碰具体经济财务」「授权不授柄」及个人信息保护口径相悖。故本页只有一个 URL，
+ *   城市选择**不进 URL**（与 v2.3.3「换城不换 URL」的纪律一致）。
+ *
+ * ★ 无 JS 降级：本页的 <select> 平铺可见（没有网格时它就是选择器），
+ *   选中后**必须点「查看」按钮**才跳转 —— 一行原生表单就够，不依赖任何脚本。
+ */
+
+/** localStorage 键名（首页脚本读它 → 手动选择优先于自动定位；两端必须一致） */
+function kcj_astro_place_store_key() {
+    return 'kcj_astro_place';
+}
+
+/** 观测地总览页地址。优先用站点上真有一页挂了 [astro_places_hub] 的那个；取不到退回默认路径。 */
+function kcj_astro_places_hub_url() {
+    static $url = null;
+    if ($url !== null) {
+        return $url;
+    }
+    $url = '';
+    // 先看有没有显式配置（后台/选项），再看有没有页面正文里含本短代码。
+    $opt = get_option('kcj_astro_places_hub_url', '');
+    if (is_string($opt) && $opt !== '') {
+        $url = $opt;
+        return $url;
+    }
+    global $wpdb;
+    $hit = $wpdb->get_var($wpdb->prepare(
+        "SELECT ID FROM {$wpdb->posts}
+          WHERE post_status = 'publish' AND post_type IN ('page','post')
+            AND post_content LIKE %s
+          ORDER BY post_type = 'page' DESC, ID ASC LIMIT 1",
+        '%' . $wpdb->esc_like('[astro_places_hub') . '%'
+    ));
+    if ($hit) {
+        $link = get_permalink((int) $hit);
+        if ($link) {
+            $url = (string) $link;
+            return $url;
+        }
+    }
+    // 兜底：约定路径（.htaccess 与 WP 都会把它当成不存在的页 → 404，故只是最后手段）
+    $url = home_url('/observatories/');
+    return $url;
+}
+
+/** 首页那个「[切换观测地]」小链接（排版在 CSS 的 .kcj-astro-place-switch） */
+function kcj_astro_place_switch_link() {
+    $u = kcj_astro_places_hub_url();
+    if ($u === '') {
+        return '';
+    }
+    return '<a class="kcj-astro-place-switch" href="' . esc_url($u) . '">切换观测地</a>';
+}
+
+/**
+ * 渲染观测地总览页的网格。
+ *
+ * 数据来源与 [astro_today] **同一份**：kcj_astro_place_groups()（目录）＋
+ * kcj_astro_load_places()（当天真有数据的锚点）。故本页不需要 data_json，
+ * 也就不必重复渲染整块今日天象 —— 正是「瘦身」要的效果。
+ *
+ * ★ 只列「当天真有数据」的锚点：列了没数据的，读者选完回到首页会看到一片「—」。
+ */
+function kcj_astro_render_places_hub() {
+    $groups = function_exists('kcj_astro_place_groups') ? kcj_astro_place_groups() : array();
+    if (!$groups) {
+        return kcj_astro_notice('观测地目录（assets/places-cn.json）不可读，暂时无法列出可选观测地。');
+    }
+    // 当天有数据的锚点集合：与 [astro_today] 同源（同一天、同一张表）
+    $places = array();
+    if (function_exists('kcj_astro_has_site_table') && kcj_astro_has_site_table()) {
+        $places = kcj_astro_load_places(current_time('Y-m-d'));
+    }
+    $covered = array();
+    foreach ($groups as $g) {
+        foreach ($g['items'] as $k => $cn2) {
+            if (isset($places[$k])) {
+                $covered[$k] = true;
+            }
+        }
+    }
+    // 当前生效的观测地：默认城（服务端口径；前端读到 localStorage 后会另说）
+    $dflt = kcj_astro_default_place();
+    $cur  = $dflt['key'];
+    $cur_cn = $dflt['cn'];
+    if (isset($places[$cur])) {
+        $cur_cn = $places[$cur]['cn'];
+    }
+
+    // 当前城所在省 —— 决定网格默认打开哪一省（与 astro-today.php 同一算法、同一理由）
+    $cur_prov = '';
+    foreach ($groups as $pad => $g) {
+        if (isset($g['items'][$cur])) {
+            $cur_prov = (string) $pad;
+            break;
+        }
+    }
+
+    return kcj_astro_render_template('astro-places', array(
+        'groups'       => $groups,
+        'covered'      => $covered,
+        'places'       => $places,
+        'cur'          => $cur,
+        'cur_cn'       => $cur_cn,
+        'cur_prov'     => $cur_prov,
+        'flat_fallback' => (!$groups || !$covered),
+        'hub_url'      => kcj_astro_places_hub_url(),
+        'store_key'    => kcj_astro_place_store_key(),
+        'anchor_count' => function_exists('kcj_astro_places_expected') ? kcj_astro_places_expected() : 0,
+        'date_str'     => current_time('Y-m-d'),
+    ));
+}
+
+add_shortcode('astro_places_hub', function ($atts) {
+    $atts = shortcode_atts(array('title' => ''), $atts, 'astro_places_hub');
+    $body = kcj_astro_render_places_hub();
+    if ($atts['title'] !== '') {
+        $body = '<h3 class="kcj-astro-hub-title">' . esc_html($atts['title']) . '</h3>' . $body;
+    }
+    return $body;
+});
+
+/* -------------------------------------------------------------------------
 /* -------------------------------------------------------------------------
  * 短代码 1：今日天象
  * ---------------------------------------------------------------------- */

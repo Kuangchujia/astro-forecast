@@ -10,6 +10,7 @@
  *   $places      array( city_key => 该城当日升落与晨昏 )   ← v2.0.0
  *   $place_mode  'off' | 'auto' | 'fixed'                 ← v2.0.0
  *   $place_fixed 固定城市键（place_mode == 'fixed' 时有值）
+ *   （v2.3.6：切换链接由 kcj_astro_place_switch_link() 现算，不经变量传入）
  *   （免责声明不再从数据里取，统一调用 kcj_astro_disclaimer_text()，避免两处文案漂移）
  *
  * ★ 观测地口径（v2.0.0）：
@@ -18,6 +19,12 @@
  *   所以「切换观测地」只换那 8 组值，不做任何天文计算。
  *   切换所需的全部 38 城数据在**服务端一次查好**、序列化进本页（单行 JSON），
  *   前端切换时零请求、零计算。
+ *
+ * ★ v2.3.6 变更：**「省份 Tab ＋ 城市网格」整块移出本模板**（用户令：「这个界面太长了，不行！」）。
+ *   本模板只留：当前观测地标签 ＋ 视觉隐藏的 <select> ＋「按我的位置」＋「切换观测地」小链接。
+ *   网格改由 [astro_places_hub]（templates/astro-places.php）渲染，落在观测地总览页。
+ *   ★ 为什么 <select> 仍留在这里、且必须留着：它是 apply()/describe()/无 JS 降级的公共支点
+ *     （详见下方原注释），网格只是它的一个视觉面。移走它 = 移走数据支点，不动。
  *
  * ★ v1.1.0 变更：删除「值日星宿」。该字段既非太阳所在宿（二十八宿轮值另有独立周期），
  *   又属择日吉凶体系，触本模块「禁吉凶谶纬」红线，故不再输出（见 feasibility-review F8）。
@@ -124,7 +131,6 @@ if (!$flat_fallback) {
     }
 }
 ?>
-?>
 <div class="kcj-astro-today" itemscope itemtype="https://schema.org/WebPage"
      data-kcj-place-mode="<?php echo esc_attr($pmode); ?>"
      data-kcj-place-cur="<?php echo esc_attr($cur); ?>"
@@ -143,14 +149,21 @@ if (!$flat_fallback) {
       <label class="kcj-astro-place-label" for="kcj-astro-place-<?php echo esc_attr($date_str ?? ''); ?>">观测地</label>
       <?php if (count($places) > 1): ?>
       <?php
-      // ★★ v2.3.3：观测地从「一个原生 <select>」升级为「省份 Tab ＋ 城市网格」。
+      // ★★ v2.3.6：观测地从「省份 Tab ＋ 城市网格」**收回**成一个原生 <select>。
       //
-      //   为什么要改：340 个锚点挤在一个下拉里，手机上要滚很久才找得到自己那一省。
+      //   为什么收回（用户令，原话）：「这个界面太长了，不行！…… 首页首屏仅保留
+      //     『当前选中城市』以及『按我的位置』按钮。将『两级联动省份标签+城市网格面板』
+      //     完全移出首页，单独做成一个独立的 WordPress 页面。」
+      //   实测依据：线上首页 HTML 205,161 字符，其中城市相关（340 个 <option>、
+      //     34 个 radio、34 个 tab、35 个 pane、41,007 字符载荷 JSON）约 100 KB、占 49%
+      //     ⇒ 首屏被这团「城市文本」压满，正文与学术关键词全被推到下面。
+      //   网格与省份 Tab 未删，只是搬去了 templates/astro-places.php（[astro_places_hub]）。
+      //
       //   为什么**不删** <select>（关键）：
       //     ① 它是 assets/astro-place.js 里 apply() 的唯一驱动（`sel.options[sel.selectedIndex]`）；
       //     ② 它是 describe() 的唯一输入（「按哪算的」那句话从它读）；
       //     ③ 它是**无 JS 时唯一的可用选择器** —— 服务端已渲染全部选项。
-      //   ⇒ 网格点击不自己算，而是「替读者去动那个 select」（value + 派发 change），
+      //   ⇒ 网格点击（**在观测地总览页**）也不自己算，只替读者去动那边的 select，
       //     从而**复用全部既有逻辑、零新代码路径**，也不会出现「两套机制并存」。
       //   ⇒ 故此处 select 只做**视觉隐藏**（.kcj-astro-sr），**不得从 DOM 移除**。
       //
@@ -159,66 +172,6 @@ if (!$flat_fallback) {
       //     用 <a> 会把「切视图」误报成「导航」，且必须 preventDefault 才能避免重载
       //     —— 而一旦 preventDefault，无 JS 降级就同时失效。用 <button> 两个问题一起消失。
       ?>
-      <?php if (!$flat_fallback): ?>
-      <?php
-      // 省份 Tab：纯 CSS 切换（radio + label），零脚本。
-      //   ★ 与 [astro_hub] 三栏目同一套纪律 —— 平台对正文的后处理会拆断内联脚本，
-      //     这是 v1.3.0「老黄历线上失效」的真因，不可破例。
-      //   $gi 是省在 $groups 里的序位，与 CSS 的 [data-gi="N"] 规则一一对应（写死到 39）。
-      $grid_id = preg_replace('/[^a-z0-9]/i', '', (string) ($date_str ?? ''));
-      ?>
-      <div class="kcj-astro-place-grid">
-        <?php
-        // 先过一遍、把「当天真有数据」的省挑出来，才能确定默认打开哪一省：
-        //   优先「当前城所在省」；若它没数据，则落第一个有数据的省。
-        //   ⚠ 分两趟（先算再渲染）是必需的：单趟遍历时还不知道后面会不会出现当前省的格子。
-        $live = array();
-        foreach ($groups as $pad => $g) {
-            $opts = array();
-            foreach ($g['items'] as $k => $cn2) {
-                if (isset($covered[$k])) {
-                    $opts[$k] = $cn2;
-                }
-            }
-            if ($opts) {
-                $live[(string) $pad] = array('name' => (string) $g['name'], 'items' => $opts);
-            }
-        }
-        $open_pad = '';
-        if ($cur_prov !== '' && isset($live[$cur_prov])) {
-            $open_pad = $cur_prov;
-        } elseif ($live) {
-            $keys_live = array_keys($live);
-            $open_pad  = (string) $keys_live[0];
-        }
-        ?>
-        <?php $gi = 0; foreach ($live as $pad => $g): ?>
-        <input class="kcj-astro-place-pradio" type="radio"
-               name="kcj-place-p-<?php echo esc_attr($grid_id); ?>"
-               id="kcj-place-p-<?php echo esc_attr($grid_id . '-' . $gi); ?>"
-               data-gi="<?php echo (int) $gi; ?>"<?php echo ((string) $pad === $open_pad) ? ' checked="checked"' : ''; ?>>
-        <?php $gi++; endforeach; ?>
-
-        <div class="kcj-astro-place-tabs">
-          <?php $gi = 0; foreach ($live as $pad => $g): ?>
-          <label class="kcj-astro-place-tab" data-gi="<?php echo (int) $gi; ?>"
-                 for="kcj-place-p-<?php echo esc_attr($grid_id . '-' . $gi); ?>"><?php echo esc_html($g['name']); ?></label>
-          <?php $gi++; endforeach; ?>
-        </div>
-
-        <div class="kcj-astro-place-panels">
-          <?php $gi = 0; foreach ($live as $pad => $g): ?>
-          <div class="kcj-astro-place-pane" data-gi="<?php echo (int) $gi; ?>">
-            <?php foreach ($g['items'] as $k => $cn2): ?>
-            <button type="button" class="kcj-astro-place-city"
-                    data-anchor="<?php echo esc_attr($k); ?>"
-                    aria-pressed="<?php echo ($k === $cur) ? 'true' : 'false'; ?>"><?php echo esc_html($cn2); ?></button>
-            <?php endforeach; ?>
-          </div>
-          <?php $gi++; endforeach; ?>
-        </div>
-      </div>
-      <?php endif; ?>
       <select class="kcj-astro-place-select<?php echo $flat_fallback ? '' : ' kcj-astro-sr'; ?>"
               id="kcj-astro-place-<?php echo esc_attr($date_str ?? ''); ?>">
         <?php if ($flat_fallback): ?>
@@ -249,6 +202,19 @@ if (!$flat_fallback) {
       </select>
       <?php endif; ?>
       <button type="button" class="kcj-astro-place-auto">按我的位置</button>
+      <?php
+      // ★ v2.3.6：「切换观测地」小链接 —— 用户令原话「在首页的城市名字旁，放一个优雅的小链接：
+      //   [切换观测地] 链接到该独立页」。放在「按我的位置」**之后**（同一 flex 行末），
+      //   它才不会把默认拿焦点的 select/按钮挤开，视线顺序也是「就地选 → 换地」。
+      //   目标 URL 由 kcj_astro_places_hub_url() 现算：先看选项、再找真挂了
+      //   [astro_places_hub] 的页面，最后才退回 /observatories/。
+      $switch = function_exists('kcj_astro_place_switch_link') ? kcj_astro_place_switch_link() : '';
+      if ($switch !== '') {
+          echo $switch;   // phpcs:ignore WordPress.Security.EscapeOutput -- 函数内已 esc_url
+      }
+      ?>
+<?php /* 上面 ?><?php 之间的换行会被 PHP 吃掉，故换行写在注释后面 */ ?>
+
     </div>
     <p class="kcj-astro-place-status" role="status" aria-live="polite"><?php
       if ($pmode === 'auto') {
@@ -366,10 +332,16 @@ if (!$flat_fallback) {
   // ★ v2.3.0：**改成数组化的紧凑载荷**。观测地由 38 扩到 340 个锚点后，沿用
   //   「对象 + 具名键」的形状会让每页多出约 100 KB（键名重复 340 遍）。
   //   数组形状：每项 [key, cn, lat, lon, sunrise, sunset, daylen,
-  //                    民用起, 民用止, 航海起, 航海止, 天文起, 天文止, 月出, 月落]
+  //                    民用起, 民用止, 航海起, 航海止, 天文起, 天文止, 月出, 月落, 省码]
   //   ⇒ 约 34 KB。索引与下面的 JS 常量一一对应，**改一处必须改两处**。
+  //   ★ v2.3.5 新增第 16 项「省码」：前端据此做**跨省守卫**（IP 报的省 ≠ 锚点所在省
+  //     时不下自动结论）。每项多一个 6 位码 ⇒ 340×7 字节，约 +2.4 KB。
+  // ★ v2.3.5：省码映射。$places 来自库表（无省市归属），省码只能从目录取。
+  $prov_map = function_exists('kcj_astro_place_prov_map') ? kcj_astro_place_prov_map() : array();
   $rows_out = array();
   foreach ($places as $k => $v) {
+      $pk = (string) $k;
+      $prow = isset($prov_map[$pk]) ? $prov_map[$pk] : array();
       $rows_out[] = array(
           (string) $k,
           (string) (isset($v['cn']) ? $v['cn'] : $k),
@@ -386,6 +358,8 @@ if (!$flat_fallback) {
           isset($v['tw_a'][1]) ? $v['tw_a'][1] : null,
           isset($v['moonrise']) ? $v['moonrise'] : null,
           isset($v['moonset']) ? $v['moonset'] : null,
+          isset($prow['p']) ? (string) $prow['p'] : '',
+          isset($prow['n']) ? (string) $prow['n'] : '',
       );
   }
   $payload = array('cur' => $cur, 'mode' => $pmode, 'n' => count($rows_out), 'rows' => $rows_out);

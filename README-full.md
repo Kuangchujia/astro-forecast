@@ -354,7 +354,7 @@ sitemap 主索引 200／子图 80＋9 条；Google／Bing／百度**三家验证
 
 ---
 
-### 1.6 v2.2.0—v2.2.7 ＋ v2.3.0 ＋ v2.3.1 ＋ **v2.3.2（修 F62 结构化数据丢失）** 增量（2026-09-23）
+### 1.6 v2.2.0—v2.2.7 ＋ v2.3.0—**v2.3.7** 增量（2026-09-23／24）
 
 > **v2.2.x 逐版全文在插件头注释里**（`wp-astro-forecast/wp-astro-forecast.php` 的 `── v2.2.0 … ──` 到
 > `── v2.3.0 … ──` 各段），每版都按「**缘起 → 处置 → 判据**」三段写。
@@ -373,6 +373,24 @@ sitemap 主索引 200／子图 80＋9 条；Google／Bing／百度**三家验证
 | **v2.3.0** | **观测地扩到全国 340 个地级锚点 ＋ 界面去重与自适应 ＋ 审计留史 ＋ 批量回写** |
 | **v2.3.1** | **修线上致命错误 F61：导入端点整个 500（闭包内 `$wpdb` 为 `null`）＋ 把这条快路径真跑纳入常驻判据** |
 | **v2.3.2** | **修 F62：「天象预告」页丢掉 Dataset 结构化数据（判据只认 `[astro_today]`，认不出 `[astro_hub]`）** |
+| **v2.3.3** | **观测地选择器升级为「省份 Tab ＋ 城市网格」**（切省零脚本，纯 CSS `radio + label`；`<select>` 只视觉隐藏，不删） |
+| **v2.3.4** | **修 v2.3.3 的一处样式类名错配**：容器类名是复数 `-panels`、样式定义是单数 `-panel` ⇒ 网格退化成竖排。顺带新增「模板类名 ↔ 样式选择器」双向配对闸 |
+| **v2.3.5** | **自动定位加双守卫**（手动优先 ＋ 页内一致性校验）；**明确否掉「距离阈值」方案**（无法区分真实长距离出行与代理误判） |
+| **v2.3.6** | **观测地网格从首页移出、独立成页**（`[astro_places_hub]`）；跨页用 `localStorage` 承接、**不用 URL 参数**（观测地不进地址栏／历史／日志） |
+| **v2.3.7** | **新增 `includes/hreflang.php`**：双语页互相声明，配对按「父页 ＋ slug」自动判定；**不写死页面 ID**、**不越界写 canonical / robots** |
+
+**v2.3.6 的一件事（首页瘦身）**：340 个观测地的按钮一次全渲染进首页，实测首页
+HTML **205,161 字符**里约 **100 KB（49%）** 是城市相关标记，把「今天是什么天象」
+挤到很下面。移出后首页只承担「今天是什么天象」，网格搬到独立页。
+**跨页承接刻意不用 `?place=…`** —— 那等于把访客的居住地写进地址栏、浏览器历史
+与服务器日志；观测地只应存在于访客自己的浏览器里。
+
+**v2.3.7 的一件事（hreflang）**：常见错法是三条 `href` 全指同一 URL，等于声明
+「中英两版同 URL」，会被 Google 判为自指重复、**整组忽略**。`hreflang` 是双向契约，
+本实现按「每页只声明自己所在那一组」写。另一个坑是**写死页面 ID** —— 站点改版即
+静默失效（本项目已因此踩过一次）。故改为按「父页 ＋ slug」自动配对：
+WordPress 保证同父同级 slug 唯一 ⇒ 配对确定。三类页面三种处理，见
+[`docs/seo-config.md`](docs/seo-config.md) §2.1。
 
 **v2.3.1 的一件事（修 F61 线上致命错误）**：v2.3.0 新加的多行快路径把语句拼装写在
 `$flush` **闭包**里，闭包内用了 `$wpdb` —— 而 **PHP 闭包不继承任何外层作用域**，
@@ -540,20 +558,24 @@ astro-forecast/
 └── docs/                         # 见第十节「文档索引」
 ```
 
-### 3.1 `includes/` 各文件职责（八个）
+### 3.1 `includes/` 各文件职责（十二个）
 
 | 文件 | 职责 |
 |---|---|
 | `class-astro-db.php` | 表结构**唯一正本**（`KCJ_Astro_DB` 类，`create()` 走 dbDelta；`health()` 供 REST 自检） |
 | `activation.php` | 激活/停用/清缓存的薄壳（**不再注册 CPT**，见 F20） |
 | `cpt.php` | CPT `astro_event` + 分类法 `event_type` + 9 个元字段 + 模板注入 + 旧 URL 301 |
-| `shortcodes.php` | **七个短代码** ＋ 事件详情渲染块（v2.0.0 新增 `astro_history_today` / `astro_forecast_report`，并给 `astro_today` 加 `place`、给 `astro_forecast_list` 加 `side`、**新增 `astro_hub`（三栏目外壳，v2.0.0 轮）**；**v2.1.0** 把 `astro_history_today` 的默认族扩到四族、加日期跳转与成组渲染） |
+| `shortcodes.php` | **八个短代码** ＋ 事件详情渲染块（v2.0.0 新增 `astro_history_today` / `astro_forecast_report`，并给 `astro_today` 加 `place`、给 `astro_forecast_list` 加 `side`、**新增 `astro_hub`（三栏目外壳，v2.0.0 轮）**；**v2.1.0** 把 `astro_history_today` 的默认族扩到四族、加日期跳转与成组渲染；**v2.3.6** 新增 `astro_places_hub`（观测地总览页，配合首页瘦身）） |
 | `rest-import.php` | REST 导入端点（四个路由，见第六节）；v2.0.0 起支持 **`daily_site` 复合判重键** `(date_str, city)` |
 | `cron.php` | 定时任务与数据新鲜度审计 |
 | `compliance.php` | 免责声明自动挂载 + 可选自动内链 + 设置页 |
 | `rankmath.php` | Rank Math 适配与 JSON-LD |
+| `admin-import.php` | 后台「数据导入」页（v2.2.0） |
+| `status-beacon.php` | 公开状态信标（v2.2.5，免凭据观察后台） |
+| `col-budget.php` | 字段长度预检（F27） |
+| `hreflang.php` | 双语面 `hreflang` 标注（**v2.3.7**；配对按「父页 ＋ slug」自动判定，不写死页面 ID；不越界写 `canonical` / `robots`） |
 
-> 口径更正：任务书写「includes/ 九个文件」并列出 8 项，实际磁盘为 **8 个文件**（上表全列）。以磁盘为准。
+> 口径更正：任务书写「includes/ 九个文件」并列出 8 项，实际磁盘为 **12 个文件**（上表全列）。以磁盘为准。
 
 ### 3.2 `templates/` 八个模板
 

@@ -11,7 +11,7 @@
 - **计算内核**：Skyfield ＋ JPL DE421 星历。二十四节气交节时刻、日月食、行星合冲留逆、大距、
   月相月龄、流星雨极大、日出日落与晨昏蒙影。
 - **数据面**：四张自定义表（日 / 事件 / 关联 / 日×城），REST 分批导入，字段白名单与复合判重键。
-- **发布面**：七个短代码、八个模板，覆盖「今日天象 / 未来预告 / 历史上今日 / 观测地 / 报告下载」。
+- **发布面**：八个短代码、八个模板，覆盖「今日天象 / 未来预告 / 历史上今日 / 观测地 / 报告下载」。
 - **验证面**：六道校验闸门（含 PHP 语法闸与 WordPress 钩子桩测试），本机离线可跑。
 
 ---
@@ -122,7 +122,7 @@ astro-forecast/
 | `class-astro-db.php` | 表结构**唯一正本**（`create()` 走 dbDelta；`health()` 供 REST 自检） |
 | `activation.php` | 激活/停用/清缓存的薄壳（**不注册 CPT** —— CPT 必须在每个请求的 `init` 上注册，写在激活钩子里会导致详情页必然 404） |
 | `cpt.php` | CPT ＋ 分类法 ＋ 九个元字段 ＋ 模板注入 ＋ 旧 URL 301 |
-| `shortcodes.php` | 七个短代码 ＋ 事件详情渲染块 |
+| `shortcodes.php` | 八个短代码 ＋ 事件详情渲染块 |
 | `rest-import.php` | REST 导入端点（四个路由） |
 | `cron.php` | 定时任务与数据新鲜度审计 |
 | `compliance.php` | 免责声明自动挂载 ＋ 可选自动内链 ＋ 设置页 |
@@ -155,8 +155,21 @@ astro-forecast/
 | `[astro_forecast_report period]` | 月/季/年度报告 ＋ 下载（MD / CSV / 打印） |
 | `[astro_related_events id mode]` | 事件关联（古今对照） |
 | `[astro_event_detail id]` | 事件详情渲染块 |
+| `[astro_places_hub]` | **观测地总览页**：省份 Tab ＋ 城市网格 ＋ 原生 `<select>` 兜底（建议独占一页，如 `/observatories/`） |
 
-**七个**短代码，参数总表见 [`docs/deploy-hub.md`](docs/deploy-hub.md)。
+**八个**短代码，参数总表见 [`docs/deploy-hub.md`](docs/deploy-hub.md)。
+
+### 观测地：为什么单开一页
+
+340 个预置观测地若全部渲染进首页，实测首页 HTML 有近一半体积是城市标记，
+把「今天是什么天象」挤到很下面。**推荐做法**：首页只放
+`[astro_today]`（它自带「当前观测地」显示、自动定位按钮、以及一个指向总览页的
+「切换观测地」小链接），网格另用 `[astro_places_hub]` 单开一页。
+
+两页之间用浏览器 `localStorage` 承接选择结果（键名 `kcj_astro_place`），
+**不用 URL 参数** —— 观测地是访客的居住地，不该出现在地址栏、浏览器历史与
+服务器日志里。总览页的地址由插件自动发现（正文含 `[astro_places_hub]` 的页面），
+也可用 `kcj_astro_places_hub_url` 选项显式指定。
 
 ---
 
@@ -202,7 +215,7 @@ KCJ_WP_USER=<用户名> KCJ_WP_APP_PASSWORD='<应用程序密码>' \
 | **传统天象无生成器** | 传统天象（客星、彗孛等）不是可计算事件，只能由人工条目表逐条录入史料 |
 | **食分模块** | 现只给「必要条件」判定，精确食分与见食带属独立模块 |
 | **历史段族级覆盖非 100%** | 已实测三族并集覆盖 366/366，但「这一天确实没有」与「还没录入」仍要靠族级 `coverage` 逐族读，不能只看条数 |
-| **PHP 桩测试覆盖一条链** | `php -l` 语法闸覆盖全部 21 件 PHP，但钩子桩测试只覆盖 `rankmath.php` 一条链；CPT / 短代码 / REST 仍无运行时判据 |
+| **PHP 桩测试覆盖一条链** | `php -l` 语法闸覆盖全部 23 件 PHP，但钩子桩测试只覆盖 `rankmath.php` 一条链；CPT / 短代码 / REST 仍无运行时判据 |
 | **大数据集不入库** | 全量观测地数据集（数十 MB 量级）由 `build_site.py` 现场产出，不进仓库 —— 算法公开，数据自产 |
 
 完整缺口清单与逐条证据见 [`docs/feasibility-review.md`](docs/feasibility-review.md) 与

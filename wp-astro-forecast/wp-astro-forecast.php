@@ -3,7 +3,7 @@
  * Plugin Name:       嘉言一得天象历法（KuangChujia 天象预报模块）
  * Plugin URI:        https://github.com/Kuangchujia/astro-forecast
  * Description:        天象预报模块（今日天象 / 未来预告 / 历史回推）。后端预计算 + 静态/半静态渲染；短代码 [astro_today] [astro_forecast_list] [astro_related_events] [astro_history_today] [astro_forecast_report]；CPT astro_event + 分类法 event_type；REST 导入端点（WordPress.com 不开放外部 MySQL，须经此入库）。数据表 wp_astro_daily / wp_astro_events / wp_astro_relations / wp_astro_daily_site 激活时自动建。
- * Version:           2.3.3
+ * Version:           2.3.7
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            嘉言一得（邝楚嘉）
@@ -396,13 +396,99 @@
  *   · 省份 `:checked` 规则**写死到 39**（省级行政区上限 ＋ 余量），不按当前省数动态生成
  *     —— 少写一条就是「那一省点不开」，而这种错只在特定省份被点到时才现形。
  *   · 无表结构变更、无新表 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。
- *     `verify_package.py` 的「CSS 标记 == 头部 Version == KCJ_ASTRO_VER」判据不变。 */
+ *     `verify_package.py` 的「CSS 标记 == 头部 Version == KCJ_ASTRO_VER」判据不变。
+ *
+ * ── v2.3.4（2026-09-24）：修 v2.3.3 的**类名错配** —— 网格样式其实一直没挂上
+ *   · ★ 症状（线上肉眼可见）：省份按钮下面，城市**不是多列网格，而是一列竖排**；
+ *     高亮的省与展开的省**不是同一个**（如高亮「吉林省」而当前城在广东）。
+ *   · 根因：模板输出 `class="kcj-astro-place-panels"`（**复数**），
+ *     而 CSS 定义的是 `.kcj-astro-place-panel`（**单数**）⇒
+ *     `.kcj-astro-place-panel { display:grid; … }` 整块落在**不存在的元素**上，
+ *     按钮失去 `grid-template-columns` ⇒ 退化成块级、每行一个。
+ *     `.kcj-astro-place-pane { display:none }` 仍生效，而 `.panels` 无任何约束
+ *     ⇒ 34 个 pane 全部按块级叠在文档流里、挤出「看起来像列表其实是断裂视觉」的一长条。
+ *   · 修法：CSS 两处 `.kcj-astro-place-panel {` → `.kcj-astro-place-panels {`
+ *     （主样式块 + 手机端 `@media` 内的网格列数），**不动** 40 条 `:checked` 规则里
+ *     本来就是复数的 `.kcj-astro-place-panels`。
+ *   · ★ 教训（已入技能 §七之六十八）：**「类名错配」是纯文本可查的错，却有 24 项本机闸
+ *     全都查不出来** —— 因为那些闸查的是「PHP 内部逻辑」与「包内一致性」，
+ *     **没有任何一道闸把「模板输出的类名」与「CSS 定义的选择器」对起来看**。
+ *   · 无表结构变更、无新表 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。 
+ * ── v2.3.5（2026-09-24）：自动定位加「境外 ＋ 跨省」双守卫（用户报「跳吉林延边」「跳深圳」）
+ *   · 症状：① 开代理／在境外网络访问 → 观测地自动跳到「吉林延边朝鲜族州」等边城；
+ *           ② 关代理仍跳错（人在揭阳、跳到深圳）。
+ *   · 取证：`ipwho.is` 实测返回 country_code=CN / city=Shenzhen / 22.5445,114.0545；
+ *           深圳 → 最近锚点正是深圳(4.3 km)；揭阳→深圳 261.7 km。
+ *           出口 IP 登记在别省而本人在揭阳，是运营商常见现象（宽带出口在省网节点）。
+ *   · 根因：定位接口给的是**访问者出口 IP**，不是本人位置。旧代码不问国别、不问省份、
+ *           不比距离 ⇒ 把「最近的锚点」直接当本地结果上报。
+ *   · ★ 实测否掉「纯距离阈值」方案：340 锚点真实稀疏区下界 = 阿里 512.6 km（最近邻居）；
+ *     而揭阳→深圳 261.7 km、揭阳→广州 320.9 km。想挡住「跳深圳」得把阈值压到
+ *     250 km 以下，那阿里的正常用户会被误拦 ⇒ **一个距离数字无法两头兼顾**。改用省份校验。
+ *   · 修法（两道守卫 ＋ 一键采用）：
+ *     ① **境外守卫**：请求补 `country_code`（ipwho.is 走 fields；ipapi.co/json/ 原生带），
+ *        回调带 `country`；非 CN 或未知 ⇒ **不套用**，只提示；
+ *     ② **跨省守卫**：载荷新增第 16、17 项（命中锚点所属省的 adcode 与省名），
+ *        IP 报的省 ≠ 锚点所在省 ⇒ **不自动改城**，只提示 ＋ 给「仍改用 X」按钮；
+ *     ③ 同省 ⇒ 正常套用（「同省内最近」语义站得住）。
+ *   · ★ 为什么跨省只提示、不硬拦：出口 IP 与本机不同省既可能是运营商常态、也可能是真异地，
+ *     代码分不清 ⇒ **判据不足时把决定权交回读者，而不是猜**。
+ *   · 新增 `kcj_astro_place_prov_map()`（锚点 → 省码/省名）；新增 CSS `.kcj-astro-place-adopt`。
+ *   · 无表结构变更 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。
+
+ * ── v2.3.7（2026-09-24）双语面 hreflang ──────────────────────────────
+ *   用户意见③：「规范中英双语 hreflang 标签」。给了三条示例，href 全指
+ *   `https://kuangchujia.com`。**校验后按「各指各自语言页」执行，未照抄
+ *   href 三条同值的写法** ——
+ *
+ *   ★ 为什么原稿不能用：hreflang 是**双向契约**。A 页声明 B 是它的英文版，
+ *     B 页也须声明 A 是它的中文版；且 `href` 三条同值＝声明「中英两版同 URL」，
+ *     Google 判为自指重复、**整组忽略**，还可能反过来污染原页语言判定。
+ *
+ *   ★ 落地口径（站上实测 319 页后定）：
+ *     · 16 个语言子页（8 组 × zh/en）各出三条：`zh-CN` → 中文页、
+ *       `en` → 英文页、`x-default` → **中文页**（站点主受众为中文，与 locale 一致；
+ *       这是口径选择，非技术必然）。
+ *     · 父栏目页／列表页是**双语 Tab 单页**（同 URL 内两面板），不存在 en/zh 两版
+ *       ⇒ **只出 `x-default` 指自身**；若强行出 `zh` 亦指自身，等于声明
+ *       「本页是中文版」而它同时是英文版，属反向失真。
+ *     · 首页／归档页不出 hreflang（不属任何语言组，出了是噪音）。
+ *
+ *   ★ 配对靠「父子关系 ＋ slug」，**不写死 ID 表**：取当前页 `post_parent`，
+ *     在其下找 `slug === 'en'` 与 `slug === 'zh'` 的子页。WordPress 保证
+ *     同父同级 slug 唯一 ⇒ 配对是确定性的。写死 `585/592` 会在站点改版时
+ *     静默失效（本项目已因此踩过一次：`wp_pub_cite.py` 写死 `PAGE_ID = 29`）。
+ *     实测 16 子页分布在 8 个 parent（29/35/74/75/13/53/616/700），
+ *     每 parent 下恰一枚 zh、一枚 en，**结论成立**。
+ *
+ *   ★ 新增 `includes/hreflang.php`（1 文件）；**不写 canonical／robots**
+ *     （那是 Rank Math 的面，不越界）；`KCJ_ASTRO_SCHEMA` **仍为 4**（无表变更）。
+ *     详见 docs/hreflang.md。
+ *
+ * ── v2.3.6（2026-09-24）：观测地网格移出首页 ＋ 观测地总览页
+ *   ─ 用户令（原话）：「这个界面太长了，不行！…… 首页首屏仅保留『当前选中城市』
+ *     以及『按我的位置』按钮。将『两级联动省份标签+城市网格面板』完全移出首页，
+ *     单独做成一个独立的 WordPress 页面 …… 在首页的城市名字旁，放一个优雅的小链接：[切换观测地]。」
+ *   ─ 实测依据：线上首页 HTML 205,161 字符；其中城市相关（340 <option> / 34 radio /
+ *     34 tab / 35 pane / 41,007 字符载荷）约 100 KB、占 49% ⇒ 首屏被城市文本压满。
+ *   ─ 改法：① astro-today.php 删掉整块网格，只留 select（视觉隐藏）＋按我的位置＋切换链接；
+ *           ② 新增短代码 [astro_places_hub] 与模板 templates/astro-places.php 承载网格；
+ *           ③ 两页不同 DOM ⇒ 选择经 localStorage（键 kcj_astro_place）承接，
+ *              首页在**定位之前**读它（手动选择优先于自动定位，第③条硬约束）；
+ *           ④ buildGrid 一字未改（首页路径不变），另加 bindHubGrid 供独立页复用同一纪律。
+ *   ─ ★ 拦下的一项（用户意见④ 伪静态 /sky-today/<城市>/）：会让 341 个城市各自成为
+ *     **可索引 URL**，等于把「邝楚嘉在揭阳」结构化公开 —— 与实际居住地口径相悖，故不做。
+ *     观测地只存在于 localStorage，**绝不进 URL**。
+ *   ─ ★ 不照抄的一项（用户意见② JSON-LD Dataset/Person）：首页 @graph 已有 7 节点、
+ *     含 Dataset 与 Person，重复注入会造成同实体冲突。hreflang（意见③）另起 v2.3.7 处理。
+ *   ─ CSS：新增 .kcj-astro-place-switch / .kcj-astro-places-hub 家族（网格样式全部沿用旧族）。
+ *   ─ KCJ_ASTRO_SCHEMA 不变（仍为 4）；无新增表、无新增查询路径。 */
 
 if (!defined('ABSPATH')) {
     exit; // 禁止直接访问
 }
 
-define('KCJ_ASTRO_VER', '2.3.3');
+define('KCJ_ASTRO_VER', '2.3.7');
 // ★ 表结构版本（与插件版本**解耦**）：列集/列宽/索引有任何变更都必须 +1，
 //   class-astro-db.php 在 init 上比对 option kcj_astro_schema_version，不符即跑 dbDelta 增量升级。
 //   v2 = data_version / dt_model 放宽到 VARCHAR(64)（v1.2.1 修 F22）。
@@ -430,6 +516,7 @@ require_once KCJ_ASTRO_PATH . 'includes/status-beacon.php';     // ⑩ 公开状
 //      （它调用 KCJ_Astro_DB::column_meta / table）—— 顺序错了不会报错，只会静默退化成
 //      「拿不到列信息 ⇒ 不预检」，正是本项目反复吃的那种「看着正常其实没生效」。
 require_once KCJ_ASTRO_PATH . 'includes/col-budget.php';        // ⑪ 字段长度预检（F27）
+require_once KCJ_ASTRO_PATH . 'includes/hreflang.php';         // ⑫ 双语面 hreflang（v2.3.7）
 
 // 激活 / 停用钩子
 register_activation_hook(__FILE__, 'kcj_astro_forecast_activate');
