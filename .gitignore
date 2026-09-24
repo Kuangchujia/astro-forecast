@@ -1,0 +1,34 @@
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# ── 星历与大体积数据（不进仓库；无网环境可手动放入）────────
+*.bsp
+de421.bsp
+data/site_daily_*.ndjson
+data/site_daily_*.sql
+data/daily_20*.ndjson
+data/events_past.json
+data/_superseded/
+
+# ── 构建产物 ──────────────────────────────────────────────
+reports/
+_tmp/
+*.log
+
+# ── 编辑器与系统 ──────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ── 凭据（绝不入库；曾用于自查是否误提交）────────────────
+*.token
+token.txt
+.env
+.env.*
+!requirements.txt
