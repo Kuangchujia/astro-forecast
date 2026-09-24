@@ -109,6 +109,21 @@ foreach ($groups as $g) {
 if (!$groups || !$covered) {
     $flat_fallback = true;
 }
+// ★ v2.3.3：当前城属于哪一省 —— 决定「城市网格默认打开哪一省的格子」。
+//   不先算出来的话，网格会默认展开第一省（北京），而当前生效的却是揭阳/其它城
+//   ⇒ 读者一进页面看到的格子里**没有**正在生效的那一格，等于「界面在说谎」。
+//   这与 v2.3.0 修「下拉默认项与生效城不一致」是同一类错，故此处同办。
+//   反查成本 O(省数) 且是纯内存遍历，不查库。
+$cur_prov = '';
+if (!$flat_fallback) {
+    foreach ($groups as $pad => $g) {
+        if (isset($g['items'][$cur])) {
+            $cur_prov = (string) $pad;
+            break;
+        }
+    }
+}
+?>
 ?>
 <div class="kcj-astro-today" itemscope itemtype="https://schema.org/WebPage"
      data-kcj-place-mode="<?php echo esc_attr($pmode); ?>"
@@ -127,7 +142,85 @@ if (!$groups || !$covered) {
     <div class="kcj-astro-place-row">
       <label class="kcj-astro-place-label" for="kcj-astro-place-<?php echo esc_attr($date_str ?? ''); ?>">观测地</label>
       <?php if (count($places) > 1): ?>
-      <select class="kcj-astro-place-select" id="kcj-astro-place-<?php echo esc_attr($date_str ?? ''); ?>">
+      <?php
+      // ★★ v2.3.3：观测地从「一个原生 <select>」升级为「省份 Tab ＋ 城市网格」。
+      //
+      //   为什么要改：340 个锚点挤在一个下拉里，手机上要滚很久才找得到自己那一省。
+      //   为什么**不删** <select>（关键）：
+      //     ① 它是 assets/astro-place.js 里 apply() 的唯一驱动（`sel.options[sel.selectedIndex]`）；
+      //     ② 它是 describe() 的唯一输入（「按哪算的」那句话从它读）；
+      //     ③ 它是**无 JS 时唯一的可用选择器** —— 服务端已渲染全部选项。
+      //   ⇒ 网格点击不自己算，而是「替读者去动那个 select」（value + 派发 change），
+      //     从而**复用全部既有逻辑、零新代码路径**，也不会出现「两套机制并存」。
+      //   ⇒ 故此处 select 只做**视觉隐藏**（.kcj-astro-sr），**不得从 DOM 移除**。
+      //
+      //   为什么格子用 <button> 而不是 <a href>：
+      //     换城**不换 URL**（数据已全部嵌在本页，换城纯改 DOM）。
+      //     用 <a> 会把「切视图」误报成「导航」，且必须 preventDefault 才能避免重载
+      //     —— 而一旦 preventDefault，无 JS 降级就同时失效。用 <button> 两个问题一起消失。
+      ?>
+      <?php if (!$flat_fallback): ?>
+      <?php
+      // 省份 Tab：纯 CSS 切换（radio + label），零脚本。
+      //   ★ 与 [astro_hub] 三栏目同一套纪律 —— 平台对正文的后处理会拆断内联脚本，
+      //     这是 v1.3.0「老黄历线上失效」的真因，不可破例。
+      //   $gi 是省在 $groups 里的序位，与 CSS 的 [data-gi="N"] 规则一一对应（写死到 39）。
+      $grid_id = preg_replace('/[^a-z0-9]/i', '', (string) ($date_str ?? ''));
+      ?>
+      <div class="kcj-astro-place-grid">
+        <?php
+        // 先过一遍、把「当天真有数据」的省挑出来，才能确定默认打开哪一省：
+        //   优先「当前城所在省」；若它没数据，则落第一个有数据的省。
+        //   ⚠ 分两趟（先算再渲染）是必需的：单趟遍历时还不知道后面会不会出现当前省的格子。
+        $live = array();
+        foreach ($groups as $pad => $g) {
+            $opts = array();
+            foreach ($g['items'] as $k => $cn2) {
+                if (isset($covered[$k])) {
+                    $opts[$k] = $cn2;
+                }
+            }
+            if ($opts) {
+                $live[(string) $pad] = array('name' => (string) $g['name'], 'items' => $opts);
+            }
+        }
+        $open_pad = '';
+        if ($cur_prov !== '' && isset($live[$cur_prov])) {
+            $open_pad = $cur_prov;
+        } elseif ($live) {
+            $keys_live = array_keys($live);
+            $open_pad  = (string) $keys_live[0];
+        }
+        ?>
+        <?php $gi = 0; foreach ($live as $pad => $g): ?>
+        <input class="kcj-astro-place-pradio" type="radio"
+               name="kcj-place-p-<?php echo esc_attr($grid_id); ?>"
+               id="kcj-place-p-<?php echo esc_attr($grid_id . '-' . $gi); ?>"
+               data-gi="<?php echo (int) $gi; ?>"<?php echo ((string) $pad === $open_pad) ? ' checked="checked"' : ''; ?>>
+        <?php $gi++; endforeach; ?>
+
+        <div class="kcj-astro-place-tabs">
+          <?php $gi = 0; foreach ($live as $pad => $g): ?>
+          <label class="kcj-astro-place-tab" data-gi="<?php echo (int) $gi; ?>"
+                 for="kcj-place-p-<?php echo esc_attr($grid_id . '-' . $gi); ?>"><?php echo esc_html($g['name']); ?></label>
+          <?php $gi++; endforeach; ?>
+        </div>
+
+        <div class="kcj-astro-place-panels">
+          <?php $gi = 0; foreach ($live as $pad => $g): ?>
+          <div class="kcj-astro-place-pane" data-gi="<?php echo (int) $gi; ?>">
+            <?php foreach ($g['items'] as $k => $cn2): ?>
+            <button type="button" class="kcj-astro-place-city"
+                    data-anchor="<?php echo esc_attr($k); ?>"
+                    aria-pressed="<?php echo ($k === $cur) ? 'true' : 'false'; ?>"><?php echo esc_html($cn2); ?></button>
+            <?php endforeach; ?>
+          </div>
+          <?php $gi++; endforeach; ?>
+        </div>
+      </div>
+      <?php endif; ?>
+      <select class="kcj-astro-place-select<?php echo $flat_fallback ? '' : ' kcj-astro-sr'; ?>"
+              id="kcj-astro-place-<?php echo esc_attr($date_str ?? ''); ?>">
         <?php if ($flat_fallback): ?>
           <?php foreach ($places as $k => $v): ?>
           <option value="<?php echo esc_attr($k); ?>" data-anchor="<?php echo esc_attr($k); ?>"<?php echo ($k === $cur) ? ' selected' : ''; ?>><?php echo esc_html($v['cn']); ?></option>

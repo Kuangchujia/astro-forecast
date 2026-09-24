@@ -3,7 +3,7 @@
  * Plugin Name:       嘉言一得天象历法（KuangChujia 天象预报模块）
  * Plugin URI:        https://github.com/Kuangchujia/astro-forecast
  * Description:        天象预报模块（今日天象 / 未来预告 / 历史回推）。后端预计算 + 静态/半静态渲染；短代码 [astro_today] [astro_forecast_list] [astro_related_events] [astro_history_today] [astro_forecast_report]；CPT astro_event + 分类法 event_type；REST 导入端点（WordPress.com 不开放外部 MySQL，须经此入库）。数据表 wp_astro_daily / wp_astro_events / wp_astro_relations / wp_astro_daily_site 激活时自动建。
- * Version:           2.3.2
+ * Version:           2.3.3
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            嘉言一得（邝楚嘉）
@@ -378,13 +378,31 @@
  *      长得一模一样，而这两种要采取的动作完全相反 ⇒ 有序列才能分辨。
  *      `expect` ＝ 目录声明的锚点总数 ⇒ 站外可判「340/340 齐」还是「38/340 缺」。
  *
- *   无表结构变更（只加索引外的读取面）、无新表 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。 */
+ *   无表结构变更（只加索引外的读取面）、无新表 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。
+ *
+ * ── v2.3.3（2026-09-24）：观测地「省份 Tab ＋ 城市网格」
+ *   · 340 个锚点在一个原生下拉里，手机上要滚很久才找得到自己那一省
+ *     ⇒ 新增 `templates/astro-today.php` 的省份 Tab ＋ 城市格子（切省**纯 CSS**，radio + label）。
+ *   · ★ **`<select>` 不删**，改为**视觉隐藏**（`.kcj-astro-sr`）—— 它是三件事的公共支点：
+ *     `apply()` 的唯一驱动、`describe()` 的唯一输入、**无 JS 时唯一可用的选择器**。
+ *     网格点击不自己算，而是「替读者去动那个 select」（`value` ＋ 派发 `change`）
+ *     ⇒ 复用全部既有逻辑、零新代码路径。
+ *   · ★ 格子用 `<button>` 而**非** `<a href="?place=…">`：换城**不换 URL**。
+ *     服务端只认 `kcj_*` 参数、**不认 `place`** ⇒ 靠跳 URL 换不出内容；
+ *     且 `<a>` 必须 `preventDefault` 才能避免重载，而无 JS 降级会随之一起失效。
+ *   · ★ 网格默认打开的那一省 ＝ **当前城所在省**（否则读者一进来看到的格子里
+ *     没有正在生效的那一格，界面等于说谎 —— 与 v2.3.0 修过的是同一类错）；
+ *     定位结果与下拉改选都会**回写网格**（`syncGrid`）。
+ *   · 省份 `:checked` 规则**写死到 39**（省级行政区上限 ＋ 余量），不按当前省数动态生成
+ *     —— 少写一条就是「那一省点不开」，而这种错只在特定省份被点到时才现形。
+ *   · 无表结构变更、无新表 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。
+ *     `verify_package.py` 的「CSS 标记 == 头部 Version == KCJ_ASTRO_VER」判据不变。 */
 
 if (!defined('ABSPATH')) {
     exit; // 禁止直接访问
 }
 
-define('KCJ_ASTRO_VER', '2.3.2');
+define('KCJ_ASTRO_VER', '2.3.3');
 // ★ 表结构版本（与插件版本**解耦**）：列集/列宽/索引有任何变更都必须 +1，
 //   class-astro-db.php 在 init 上比对 option kcj_astro_schema_version，不符即跑 dbDelta 增量升级。
 //   v2 = data_version / dt_model 放宽到 VARCHAR(64)（v1.2.1 修 F22）。
