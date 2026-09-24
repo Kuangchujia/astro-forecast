@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "kind_doc": {
+    "historical": "史料型：给纪年与月日，由 compute_sky.back_calc_historical() 回推（朔/望等），三条对外文案（文献记载/现代回推/史料辨析）由该函数按 method 如实生成。必填 era_year/month/day/calendar_note/source_text/source_ref。",
+    "catalog": "目录型：无法由星历推出的**权威照录**条目（观测统计结论、机构预报值、古人的一次具体记载时刻）。给多少算多少，一条都不算。必填 jd_core/title/source_ref；event_time_bj 由 jd_core 格式化而得，不要手填。"
+  },
+  "red_line": "不编造事件。凡本表的条目，source_ref 必须能指到具体出处（书、卷次、页码/网址）。缺出处直接报错，不落库。",
+  "publish_rule": "verified 为 false（或缺失）一律强制 publish_status=0（草稿），无论条目里写了什么 —— 未逐字核录的史料不得上前台。verified 为 true 且 publish_status 显式给 1 才会上前台。",
+  "entries": [
+    {
+      "kind": "historical",
+      "slug": "todo-historical-sample-01",
+      "verified": false,
+      "publish_status": 0,
+      "era_year": "1000BC",
+      "month": 1,
+      "day": 1,
+      "calendar_note": "TODO-人工补录（占位日期，非具体史料）",
+      "source_text": "TODO-人工补录",
+      "source_ref": "TODO-人工补录",
+      "title": "TODO-人工补录（历史条目结构样例）"
+    },
+    {
+      "kind": "historical",
+      "slug": "todo-historical-sample-02",
+      "verified": false,
+      "publish_status": 0,
+      "era_year": "1900AD",
+      "month": 3,
+      "day": 1,
+      "calendar_note": "TODO-人工补录（占位日期，非具体史料）",
+      "source_text": "TODO-人工补录",
+      "source_ref": "TODO-人工补录",
+      "title": "TODO-人工补录（历史条目结构样例）"
+    }
+  ]
+}

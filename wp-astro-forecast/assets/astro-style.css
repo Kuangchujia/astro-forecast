@@ -1,0 +1,557 @@
+/* 天象预报模块样式（指令 06 的 astro-style.css）｜多端适配（桌面 / 平板 / 手机）｜配色贴合站点国风
+ *
+ * ★ v1.2.0：由 assets/astro.css 改名而来（对齐指令 06 的文件名），并补上
+ *   单页/归档包装层、面包屑、关联标签、溯源行、自动内链、页级声明块等新元素的样式。
+ *   所有选择器都带 kcj-astro- 前缀，不改动主题（Seedlet）的既有类名。
+ */
+
+/* 容器：三块内容区共用一套设计变量 */
+.kcj-astro-today, .kcj-astro-list, .kcj-astro-detail, .kcj-astro-hub {
+  --kcj-ink: #2b2b2b;
+  --kcj-cinnabar: #9e3b30;
+  --kcj-line: #e4ddcf;
+  --kcj-bg: #fbf7ef;
+  --kcj-card: #ffffff;
+  color: var(--kcj-ink);
+  font-family: "Noto Serif SC", "Songti SC", "SimSun", serif;
+  line-height: 1.8;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* 单页 / 归档的整页包装（含 get_header 之后的区域） */
+.kcj-astro-main { padding: 8px 0 40px; }
+.kcj-astro-wrap { max-width: 960px; margin: 0 auto; padding: 0 16px; }
+.kcj-astro-breadcrumb { font-size: 13px; color: #888; margin: 8px 0 14px; }
+.kcj-astro-breadcrumb a { color: var(--kcj-cinnabar); text-decoration: none; }
+.kcj-astro-breadcrumb span { margin: 0 6px; color: #bbb; }
+.kcj-astro-archive-head h1 { font-size: 22px; color: var(--kcj-cinnabar); margin: 0 0 6px; }
+.kcj-astro-archive-head .kcj-astro-note { margin-top: 0; }
+
+.kcj-astro-h3, .kcj-astro-title { color: var(--kcj-cinnabar); }
+.kcj-astro-title { font-size: 24px; line-height: 1.4; }
+.kcj-astro-city { font-size: 13px; color: #888; margin-left: 8px; font-weight: normal; }
+
+/* 视觉隐藏（v2.3.0）：**只给视觉**，语义与读屏照旧。
+   ★ 用途是「去重复但不丢大纲」：页面上「今日天象」原本出现三次（页面标题、栏目标头、
+     板块标题），第 2、3 次是纯重复 ⇒ 留一个视觉隐藏的标题保住 <h3> 的语义与大纲位次。
+   ★ 不用 display:none（读屏也读不到）也不用 visibility:hidden（不占位但同样不可读）。 */
+.kcj-astro-sr {
+  /* ★ 每条都带 !important：本类会与**语义化**的标题类（如 .kcj-astro-hub-pane-h）
+     同时挂在一个元素上，而后者在文件更后面、同特异度 ⇒ 不加 !important 时
+     它设的 margin/font-size 会盖掉这里，留下一个「1px 却带 17px 字号与外边距」的
+     幽灵盒（视觉上不可见，但会污染行内布局与打印分页）。 */
+  position: absolute !important;
+  width: 1px !important; height: 1px !important;
+  padding: 0 !important; margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important; clip-path: inset(50%) !important;
+  white-space: nowrap !important; border: 0 !important;
+  font-size: 1px !important; line-height: 1 !important;
+}
+
+/* 元信息行（坐标口径 / 方法 / 星历 / ΔT 等溯源信息） */
+.kcj-astro-meta { font-size: 13px; color: #777; margin: 6px 0 12px; }
+.kcj-astro-provenance { border-left: 3px solid var(--kcj-line); padding-left: 8px; }
+
+/* 网格：默认 2 列，手机 1 列 */
+.kcj-astro-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-top: 12px;
+}
+.kcj-astro-card {
+  background: var(--kcj-card);
+  border: 1px solid var(--kcj-line);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.kcj-astro-card h4 { margin: 0 0 8px; color: var(--kcj-cinnabar); font-size: 16px; }
+.kcj-astro-card ul { margin: 0; padding-left: 18px; }
+.kcj-astro-card li { margin-bottom: 4px; font-size: 14px; }
+.kcj-astro-card table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.kcj-astro-card th, .kcj-astro-card td { border-bottom: 1px solid var(--kcj-line); padding: 4px 6px; text-align: left; }
+
+/* 预告列表 */
+.kcj-astro-intro { font-size: 14px; color: #666; }
+.kcj-astro-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.kcj-astro-tab {
+  border: 1px solid var(--kcj-line);
+  background: var(--kcj-bg);
+  color: var(--kcj-ink);
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.kcj-astro-tab:hover { border-color: var(--kcj-cinnabar); }
+.kcj-astro-tab.is-active { background: var(--kcj-cinnabar); color: #fff; border-color: var(--kcj-cinnabar); }
+.kcj-astro-cards { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.kcj-astro-cards .kcj-astro-card a { color: var(--kcj-cinnabar); text-decoration: none; font-size: 15px; }
+.kcj-astro-cards .kcj-astro-card a:hover { text-decoration: underline; }
+.kcj-astro-time { display: block; font-size: 13px; color: #888; margin: 2px 0; }
+
+/* 详情页参数表 */
+.kcj-astro-params { width: 100%; border-collapse: collapse; font-size: 14px; }
+.kcj-astro-params th, .kcj-astro-params td { border: 1px solid var(--kcj-line); padding: 6px 10px; text-align: left; vertical-align: top; }
+.kcj-astro-params th { background: var(--kcj-bg); width: 30%; }
+.kcj-astro-block { margin: 18px 0; }
+.kcj-astro-block h2 { font-size: 17px; color: var(--kcj-cinnabar); border-left: 4px solid var(--kcj-cinnabar); padding-left: 8px; }
+.kcj-astro-block blockquote {
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: var(--kcj-bg);
+  border-left: 3px solid var(--kcj-line);
+  font-size: 14px;
+}
+.kcj-astro-ref { font-size: 13px; color: #666; }
+
+/* 古今对照 / 关联 */
+.kcj-astro-related { list-style: none; padding: 0; margin: 8px 0 0; font-size: 14px; }
+.kcj-astro-related li { padding: 5px 0; border-bottom: 1px dotted var(--kcj-line); }
+.kcj-astro-related a { color: var(--kcj-cinnabar); }
+.kcj-astro-reltag {
+  display: inline-block;
+  font-size: 11.5px;
+  line-height: 1.6;
+  padding: 0 6px;
+  margin-right: 6px;
+  border-radius: 3px;
+  background: var(--kcj-bg);
+  border: 1px solid var(--kcj-line);
+  color: #777;
+}
+.kcj-astro-reltag-alt { border-style: dashed; color: #999; }
+.kcj-astro-related-block .kcj-astro-note { margin-top: 0; }
+
+/* 自动内链（指令 08；默认关闭，开启后由 the_content 注入） */
+.kcj-astro-inlink { color: var(--kcj-cinnabar); text-decoration: none; border-bottom: 1px dotted currentColor; }
+
+/* 声明与占位 */
+.kcj-astro-disclaimer {
+  font-size: 12.5px;
+  color: #999;
+  border-top: 1px dashed var(--kcj-line);
+  padding-top: 10px;
+  margin-top: 16px;
+}
+.kcj-astro-disclaimer-block { margin-top: 18px; }
+.kcj-astro-special { background: #fff4e6; border: 1px solid #ffd8a8; border-radius: 6px; padding: 8px 10px; font-size: 14px; }
+.kcj-astro-special ul { margin: 6px 0 0; padding-left: 18px; }
+.kcj-astro-special a { color: var(--kcj-cinnabar); }
+.kcj-astro-note { font-size: 12.5px; color: #888; }
+.kcj-astro-nodata, .kcj-astro-error { font-size: 14px; color: #888; }
+.kcj-astro-error { color: var(--kcj-cinnabar); }
+.kcj-astro-fallback { font-size: 14px; }
+
+/* 多端适配 */
+@media (max-width: 640px) {
+  .kcj-astro-grid { grid-template-columns: 1fr; }
+  .kcj-astro-today, .kcj-astro-list, .kcj-astro-detail { padding: 10px; }
+  .kcj-astro-card li, .kcj-astro-card table, .kcj-astro-cards .kcj-astro-card a { font-size: 13px; }
+  .kcj-astro-title { font-size: 20px; }
+  .kcj-astro-tabs { gap: 6px; }
+  .kcj-astro-tab { padding: 5px 10px; font-size: 13px; }
+  .kcj-astro-params th { width: 38%; }
+}
+@media (min-width: 641px) and (max-width: 1024px) {
+  .kcj-astro-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ==========================================================================
+   v2.0.0 新增：观测地选择器 / 历史上今日天象 / 报告与下载
+   ========================================================================== */
+
+/* ---------- 今日栏头部：日期 ＋ 观测地（v2.3.0） ----------
+   取代原来那行可见的 <h3>「今日天象 · 日期 城市」—— 栏目标头已经写着「今日天象」了。
+   这里只留两个读者真正需要变动的量：**哪一天**、**按哪个观测地**。 */
+.kcj-astro-today-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 2px 0 10px;
+}
+.kcj-astro-today-date {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--kcj-ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+}
+.kcj-astro-today-place {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--kcj-cinnabar);
+  background: #f7f0ea;
+  border: 1px solid var(--kcj-line);
+  border-radius: 999px;
+  padding: 1px 10px;
+}
+
+/* ---------- 观测地选择器（[astro_today place=auto]） ---------- */
+.kcj-astro-place-bar {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  background: #f7f3ea;
+  border: 1px solid var(--kcj-line);
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+.kcj-astro-place-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.kcj-astro-place-label { font-weight: 700; color: #555; flex: 0 0 auto; }
+.kcj-astro-place-select {
+  flex: 1 1 14em;
+  min-width: 9em;
+  max-width: 100%;
+  /* 触控目标 ≥ 34px：手机上 <select> 太矮会点不中（原先是 3px 内边距，约 24px） */
+  min-height: 34px;
+  font-size: 13.5px;
+  padding: 4px 8px;
+  border: 1px solid var(--kcj-line);
+  border-radius: 6px;
+  background: #fff;
+  color: #333;
+}
+.kcj-astro-place-select:focus { outline: 2px solid var(--kcj-cinnabar); outline-offset: 1px; }
+.kcj-astro-place-auto {
+  flex: 0 0 auto;
+  min-height: 34px;
+  font-size: 13px;
+  padding: 4px 12px;
+  border: 1px solid var(--kcj-cinnabar);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--kcj-cinnabar);
+  cursor: pointer;
+}
+.kcj-astro-place-auto:hover { background: var(--kcj-cinnabar); color: #fff; }
+.kcj-astro-place-auto:focus { outline: 2px solid var(--kcj-cinnabar); outline-offset: 1px; }
+/* 状态行：单独一行、小字。
+   ★ 这里是**唯一**说明「按哪算的」的地方 —— 原先把同一件事在标题、下拉、状态、注脚
+     里说了四遍（用户报的「重复的内容过多」），现在合成一句。 */
+.kcj-astro-place-status {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: #7a736a;
+}
+.kcj-astro-city { font-size: 13px; font-weight: 400; color: var(--kcj-cinnabar); margin-left: 6px; }
+
+/* ---------- 口径与方法（折叠） ----------
+   溯源信息应当可查、但不该在读者看天象时挤在最上面。
+   ★ 折起来 ≠ 藏起来：内容仍在 DOM 里（搜索、打印、读屏都拿得到），
+     且 `<details>` 是原生元素 —— 无 JS、无样式也仍然可展开。 */
+.kcj-astro-spec {
+  margin: 0 0 14px;
+  border: 1px solid var(--kcj-line);
+  border-radius: 8px;
+  background: #fdfbf6;
+  font-size: 13px;
+}
+.kcj-astro-spec > summary {
+  cursor: pointer;
+  padding: 7px 12px;
+  color: #6b6459;
+  font-weight: 700;
+  list-style: none;
+}
+.kcj-astro-spec > summary::-webkit-details-marker { display: none; }
+.kcj-astro-spec > summary::before { content: "▸ "; color: var(--kcj-cinnabar); }
+.kcj-astro-spec[open] > summary::before { content: "▾ "; }
+.kcj-astro-spec > summary:hover { color: var(--kcj-cinnabar); }
+.kcj-astro-spec > ul { margin: 0 0 8px; padding: 0 14px 0 30px; color: #6b6459; }
+.kcj-astro-spec > ul > li { margin: 2px 0; }
+.kcj-astro-v { font-variant-numeric: tabular-nums; }
+.kcj-astro-coverage { padding-left: 20px; }
+.kcj-astro-coverage li { margin: 3px 0; }
+
+/* ---------- 历史上今日天象 ---------- */
+.kcj-astro-history {
+  font-size: 15px;
+  line-height: 1.75;
+  color: #333;
+  margin: 1.4em 0;
+}
+.kcj-astro-history-intro, .kcj-astro-history .kcj-astro-intro { font-size: 13.5px; color: #777; }
+.kcj-astro-history-list { list-style: none; margin: 12px 0 0; padding: 0; }
+.kcj-astro-history-item {
+  border-left: 3px solid var(--kcj-line);
+  padding: 8px 0 8px 12px;
+  margin-bottom: 10px;
+}
+.kcj-astro-history-item:hover { border-left-color: var(--kcj-cinnabar); }
+.kcj-astro-history-year {
+  display: inline-block;
+  min-width: 4.2em;
+  font-weight: 700;
+  color: var(--kcj-cinnabar);
+  font-variant-numeric: tabular-nums;
+}
+.kcj-astro-history-type {
+  display: inline-block;
+  font-size: 12px;
+  color: #666;
+  border: 1px solid var(--kcj-line);
+  border-radius: 3px;
+  padding: 0 5px;
+  margin-right: 6px;
+}
+.kcj-astro-history-title { font-size: 15.5px; }
+.kcj-astro-history-sum { margin: 4px 0 0; color: #444; }
+.kcj-astro-tag {
+  display: inline-block;
+  font-size: 12px;
+  color: #fff;
+  background: #8a7f6d;
+  border-radius: 3px;
+  padding: 0 5px;
+  margin-right: 6px;
+}
+.kcj-astro-history-lit, .kcj-astro-history-disc { margin: 4px 0 0; font-size: 14px; color: #555; }
+
+/* ---------- 历史栏目（v2.1.0 增）：日期跳转 ＋ 同名天象的「年份清单」折叠块 ---------- */
+/* 日期跳转：让「这一天确实没有」时读者能走到邻日 —— 否则一年里有大半日子打开是空的，
+   而读者没有任何办法换一天看。 */
+.kcj-astro-history-nav { font-size: 13px; margin: 6px 0 12px; }
+.kcj-astro-nav-label { color: #777; margin-right: 6px; }
+/* 期间切换条（v2.2.0）：与历史栏「换个日子看」同一成法 —— 纯链接、零脚本。
+   当前期间用实心朱砂块标出，读者一眼知道自己在看哪一档。 */
+.kcj-astro-period-nav { font-size: 13px; margin: 4px 0 10px; }
+.kcj-astro-period-cur {
+  display: inline-block;
+  margin: 0 6px 4px 0;
+  padding: 2px 9px;
+  font-size: 12.5px;
+  color: #fff;
+  background: var(--kcj-cinnabar);
+  border: 1px solid var(--kcj-cinnabar);
+  border-radius: 10px;
+}
+.kcj-astro-nav-a {
+  display: inline-block;
+  margin: 0 6px 4px 0;
+  padding: 2px 9px;
+  font-size: 12.5px;
+  color: var(--kcj-cinnabar);
+  border: 1px solid var(--kcj-line);
+  border-radius: 10px;
+  text-decoration: none;
+}
+.kcj-astro-nav-a:hover { border-color: var(--kcj-cinnabar); }
+/* 折行组：左侧标色与普通条目区分开，一眼看出「这是一组历年重现的天象」 */
+.kcj-astro-history-group { border-left-color: var(--kcj-cinnabar); }
+.kcj-astro-group-head { margin-bottom: 2px; }
+.kcj-astro-count { display: inline-block; margin-left: 8px; font-size: 12.5px; color: #777; }
+.kcj-astro-years {
+  margin: 4px 0 8px;
+  font-size: 13.5px;
+  line-height: 1.9;
+  color: #444;
+  word-break: break-word;   /* 126 个年份连成一行时必须能断，否则撑破容器 */
+}
+.kcj-astro-group-latest {
+  border-left: 2px dotted var(--kcj-line);
+  padding-left: 10px;
+  margin-top: 6px;
+}
+.kcj-astro-group-latest .kcj-astro-note { margin: 0 0 4px; }
+
+/* ---------- 报告 ---------- */
+.kcj-astro-report { font-size: 15px; line-height: 1.7; color: #333; margin: 1.4em 0; }
+.kcj-astro-report-h3 { font-size: 19px; margin: 0 0 8px; }
+.kcj-astro-report-month { margin: 16px 0 22px; }
+.kcj-astro-report-month h4 {
+  font-size: 15.5px;
+  margin: 0 0 6px;
+  padding-left: 8px;
+  border-left: 3px solid var(--kcj-cinnabar);
+}
+/* ★ v2.3.0 修「类型列被压成一字一行」（用户截图：『行星天象』竖排成四行）。
+   成因 ＝ 表格比容器宽 ⇒ 浏览器按内容比例压缩各列；中文可在任意字间断行，
+   于是最窄的「类型」列被压到十几像素，四字词就竖着排了。
+   三层一起治（缺一层都会被「表格必须塞进容器」这条约束压回去）：
+     ① 外层 .kcj-astro-tablewrap 允许横向滚动，表格给 min-width ⇒ 不再压缩；
+     ② colgroup 给「时间/类型」定宽（定长或短词，本就不该让它们承担压缩）；
+     ③ 这两列 nowrap。 */
+.kcj-astro-tablewrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  /* 只在真的溢出时才可能出滚动条；给一点下边距，免得滚动条贴住下一段 */
+  padding-bottom: 2px;
+}
+.kcj-astro-report-table { width: 100%; min-width: 34em; border-collapse: collapse; font-size: 14px; }
+.kcj-astro-report-table th, .kcj-astro-report-table td {
+  border: 1px solid var(--kcj-line);
+  padding: 5px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.kcj-astro-report-table thead th { background: #f7f3ea; font-weight: 700; color: #555; }
+.kcj-astro-col-time { width: 8.6em; }
+.kcj-astro-col-type { width: 5.6em; }
+/* ★ v2.3.0 补：定完「时间/类型」之后，剩下的宽度由浏览器按内容自分配，
+   结果「天象」（标题）被「说明」挤到很窄 —— 标题折成三行，而说明本就长、多折两行无妨。
+   读者是**先看天象名**再决定要不要看说明 ⇒ 给标题列一个下限（两者按 1:2 分余量）。 */
+.kcj-astro-col-what { width: 32%; }
+.kcj-astro-col-sum { width: auto; }
+.kcj-astro-td-what { min-width: 11em; }
+.kcj-astro-td-time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.kcj-astro-td-type { white-space: nowrap; }
+.kcj-astro-report-table tbody tr:nth-child(even) { background: #fcfaf6; }
+
+/* ---------- 下载条 ---------- */
+.kcj-astro-dl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 6px;
+  padding: 9px 10px;
+  background: #f7f3ea;
+  border: 1px solid var(--kcj-line);
+  border-radius: 6px;
+  font-size: 13.5px;
+}
+.kcj-astro-dl-label { color: #666; }
+.kcj-astro-dl button {
+  font-size: 13px;
+  padding: 4px 11px;
+  border: 1px solid var(--kcj-cinnabar);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--kcj-cinnabar);
+  cursor: pointer;
+}
+.kcj-astro-dl button:hover { background: var(--kcj-cinnabar); color: #fff; }
+
+@media (max-width: 640px) {
+  .kcj-astro-report-table { font-size: 12.5px; }
+  .kcj-astro-report-table th, .kcj-astro-report-table td { padding: 4px 5px; }
+  .kcj-astro-place-bar { font-size: 12.5px; padding: 9px 10px; }
+  /* 手机：下拉与按钮各占一行、都撑满 —— 半宽的下拉在「省→市→县」三级里点不中 */
+  .kcj-astro-place-select { flex: 1 1 100%; }
+  .kcj-astro-place-auto { flex: 1 1 100%; min-height: 40px; }
+  /* 手机上表格一律横向滚动（min-width 由上面的 34em 保证），不压列 */
+  .kcj-astro-tablewrap { margin-right: -4px; }
+  .kcj-astro-today-date { font-size: 18px; }
+  .kcj-astro-hub { padding-left: 2px; padding-right: 2px; }
+}
+
+/* 打印（“打印 / 存为 PDF”按钮走浏览器打印，隐藏交互件） */
+@media print {
+  .kcj-astro-place-bar, .kcj-astro-dl, .kcj-astro-tabs, .kcj-astro-disclaimer { display: none !important; }
+  /* 日期跳转是链接，纸上无用 ⇒ 打印时去掉（否则印出来是一排点不动的假按钮） */
+  .kcj-astro-history-nav { display: none !important; }
+  /* 期间切换条只在屏幕上用于导航，打印件里是噪音 */
+  .kcj-astro-period-nav { display: none !important; }
+  /* 折行组整体别跨页断（年份清单断成两半就读不出「连续区间」了） */
+  .kcj-astro-history-group { break-inside: avoid; }
+  .kcj-astro-report-table { font-size: 11pt; }
+  .kcj-astro-history-item { break-inside: avoid; }
+}
+
+/* ---------------------------------------------------------------------------
+ * 天象预告「三栏目」外壳（v2.0.0）
+ * 切换**纯 CSS**（radio + label），零脚本 —— 平台会拆断内联脚本，理由见 shortcodes.php。
+ * 三个栏目的内容**全部在 DOM 里**（仅以 display:none 隐藏），故搜索与打印都不丢内容。
+ * ------------------------------------------------------------------------- */
+.kcj-astro-hub { padding-top: 4px; }
+
+/* 真正承载选中状态的 radio：视觉上藏起来，但仍可被辅助技术聚焦（不是 display:none） */
+.kcj-astro-hub-radio {
+  position: absolute; width: 1px; height: 1px;
+  opacity: 0; margin: 0; padding: 0; border: 0; pointer-events: none;
+  clip: rect(0 0 0 0); clip-path: inset(50%); overflow: hidden;
+}
+
+.kcj-astro-hub-bar {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  border-bottom: 2px solid var(--kcj-line);
+  margin: 0 0 14px;
+}
+.kcj-astro-hub-tab {
+  flex: 1 1 170px;
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 10px 12px 9px;
+  border: 1px solid var(--kcj-line); border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: var(--kcj-bg);
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.kcj-astro-hub-tab-static { cursor: default; }
+.kcj-astro-hub-tab-n {
+  font-size: 12px; line-height: 18px; min-width: 18px; text-align: center;
+  color: #fff; background: #b9b0a0; border-radius: 999px; padding: 0 5px;
+}
+.kcj-astro-hub-tab-t { font-size: 15px; font-weight: 700; color: var(--kcj-ink); }
+.kcj-astro-hub-tab-s { flex-basis: 100%; font-size: 12px; color: #8a8378; }
+.kcj-astro-hub-tab:hover { background: #fff; }
+
+/* 选中态：栏目标头高亮 */
+.kcj-astro-hub-radio[data-i="0"]:checked ~ .kcj-astro-hub-bar .kcj-astro-hub-tab[data-i="0"],
+.kcj-astro-hub-radio[data-i="1"]:checked ~ .kcj-astro-hub-bar .kcj-astro-hub-tab[data-i="1"],
+.kcj-astro-hub-radio[data-i="2"]:checked ~ .kcj-astro-hub-bar .kcj-astro-hub-tab[data-i="2"] {
+  background: var(--kcj-card);
+  box-shadow: inset 0 3px 0 var(--kcj-cinnabar);
+}
+.kcj-astro-hub-radio[data-i="0"]:checked ~ .kcj-astro-hub-bar .kcj-astro-hub-tab[data-i="0"] .kcj-astro-hub-tab-n,
+.kcj-astro-hub-radio[data-i="1"]:checked ~ .kcj-astro-hub-bar .kcj-astro-hub-tab[data-i="1"] .kcj-astro-hub-tab-n,
+.kcj-astro-hub-radio[data-i="2"]:checked ~ .kcj-astro-hub-bar .kcj-astro-hub-tab[data-i="2"] .kcj-astro-hub-tab-n {
+  background: var(--kcj-cinnabar);
+}
+
+/* 内容区：无 tabs（平铺）时三栏全展开；有 tabs 时按选中项显示一栏 */
+.kcj-astro-hub-pane { display: none; }
+.kcj-astro-hub:not([data-tabs="1"]) .kcj-astro-hub-pane { display: block; }
+.kcj-astro-hub-radio[data-i="0"]:checked ~ .kcj-astro-hub-panes > .kcj-astro-hub-pane[data-i="0"],
+.kcj-astro-hub-radio[data-i="1"]:checked ~ .kcj-astro-hub-panes > .kcj-astro-hub-pane[data-i="1"],
+.kcj-astro-hub-radio[data-i="2"]:checked ~ .kcj-astro-hub-panes > .kcj-astro-hub-pane[data-i="2"] {
+  display: block;
+}
+.kcj-astro-hub-pane-h { font-size: 17px; color: var(--kcj-cinnabar); margin: 6px 0 10px; }
+
+/* 「清除视图参数」规范链接（v2.3.0）：只在地址栏真的带参数时出现 */
+.kcj-astro-hub-clean {
+  margin: 14px 0 2px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--kcj-line);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.kcj-astro-hub-clean a { color: var(--kcj-cinnabar); }
+.kcj-astro-hub-clean .kcj-astro-note { display: block; margin-top: 2px; }
+@media print { .kcj-astro-hub-clean { display: none !important; } }
+
+/* ★ 这里**刻意不设**「默认显示第一栏」的兜底规则。
+   加了它会在切到第 2／3 栏时**两栏同时显示**（第一栏被兜底强制 block）——
+   用「看起来更周全」换来了一个真实缺陷。`:checked ~` 兄弟选择器在所有在用浏览器
+   都支持，故不需要兜底；真要兜底也应该兜在 JS 侧或服务端渲染上。 */
+
+/* 打印：三栏**全部展开**。否则打印出来的报告会少两栏，而这种错很难发现。 */
+@media print {
+  .kcj-astro-hub-radio { display: none !important; }
+  .kcj-astro-hub-pane { display: block !important; }
+  .kcj-astro-hub-tab { box-shadow: none !important; }
+}
+
+/* 手机：栏目标头改为纵向堆叠 */
+@media (max-width: 640px) {
+  .kcj-astro-hub-tab { flex: 1 1 100%; }
+}
+
+/* ── 版本标记（勿删）────────────────────────────────────────────────
+   用途：本文件是公开可读的（PHP 文件有 ABSPATH 守卫，直访只输出 0 字节），
+   故把版本号写在这里，供线上**免凭据**核对「站上跑的是哪一版」。
+   ⚠ 改版时必须与 wp-astro-forecast.php 的 KCJ_ASTRO_VER 同步 ——
+     verify_package.py 有判据钉住三者一致（CSS 标记 == 头部 Version == 常量）。
+   ─────────────────────────────────────────────────────────────── */
+/* kcj-astro-version: 2.3.2 */

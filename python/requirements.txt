@@ -1,0 +1,22 @@
+# 天象预报计算脚本依赖（交付物 B · v1.1.0）
+# 安装：pip install -r requirements.txt
+#
+# ★ skyfield-data（可选但强烈建议）：随包附带 de421.bsp，装完即**离线可用**。
+#   不装也不致命——脚本有「五级星历发现」：显式路径 → 环境变量 KCJ_EPHEMERIS →
+#   工作目录（./ data/ ephemeris/ python/）→ skyfield_data 内置 → 才联网下载。
+skyfield>=1.50
+# 不锁版本：实测环境为 skyfield-data 7.0.0；锁死反而可能挡住可用版本
+skyfield-data
+
+# 星历覆盖区间（★ 实测值，勿凭印象写）：
+#   de421.bsp   1899-07-28 — 2053-10-08   ← 默认档（不是「1900—2050」）
+#   de440s.bsp  1849-12-26 — 2150-01-22   ← 同样到不了公元前
+#   de440/de430 1550 — 2650
+#   de422.bsp   -3000 — 3000
+#   de431/de441 -13200 — 17191            ← 要覆盖公元前需此档（GB 级）
+#
+# 覆盖区间之外**不会崩**：自动降级到 Meeus 解析式（ch.25/47/49），
+# 只给近似值 + ΔT 区间，输出 method='analytic_meeus'。
+#
+# 写库模式（★ 仅自建 MySQL；WordPress.com 不开放外部 DB，线上请用 --wp-rest）
+# pymysql>=1.1

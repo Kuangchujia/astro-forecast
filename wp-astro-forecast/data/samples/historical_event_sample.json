@@ -1,0 +1,82 @@
+{
+  "chronology": {
+    "era_year": -719,
+    "month": 2,
+    "day": 22,
+    "era_year_display": "公元前 720 年",
+    "calendar_note": "鲁隐公三年春王二月己巳（儒略历）",
+    "gregorian_bj": "720BC-02-22 12:00",
+    "year_convention": "天文纪年（0 = 公元前 1 年）；若原文为「公元前 N 年」，请用 'NBC' 写法传入或换算为 −(N−1)"
+  },
+  "literature": {
+    "source_text": "《春秋》隐公三年：春王二月己巳，日有食之。",
+    "source_ref": "《春秋》[M]. 先秦."
+  },
+  "calc": {
+    "jd_query_tt": 1458495.906121,
+    "jd_query_ut": 1458495.666667,
+    "jd_scale": "TT (JDE)",
+    "dt_model": "de421+dt_espenak_meeus_2006+tt_scale",
+    "delta_t_sec": 20688.84,
+    "time_uncertainty": "±7200 s（约 ±120.0 min；古代典型 ±30min～±2h）",
+    "nearest_phases": [
+      {
+        "phase": "朔（新月）",
+        "jd_tt": 1458495.758891,
+        "time_bj": "720BC-02-22 08:28",
+        "time_bj_earliest": "720BC-02-22 06:28",
+        "time_bj_latest": "720BC-02-22 10:28",
+        "delta_from_query_days": -0.1472,
+        "moon_ecl_lat_deg": 0.4763,
+        "eclipse_note": "朔时月球黄纬 |β|=0.48° < 1.0°，具备日食的**必要条件**，可能性较高；是否见食与食分须由独立食分模块精算。"
+      },
+      {
+        "phase": "望（满月）",
+        "jd_tt": 1458510.612127,
+        "time_bj": "720BC-03-09 04:57",
+        "time_bj_earliest": "720BC-03-09 02:57",
+        "time_bj_latest": "720BC-03-09 06:57",
+        "delta_from_query_days": 14.706
+      },
+      {
+        "phase": "望（满月）",
+        "jd_tt": 1458480.873163,
+        "time_bj": "720BC-02-07 11:13",
+        "time_bj_earliest": "720BC-02-07 09:13",
+        "time_bj_latest": "720BC-02-07 13:13",
+        "delta_from_query_days": -15.033
+      },
+      {
+        "phase": "朔（新月）",
+        "jd_tt": 1458525.113229,
+        "time_bj": "720BC-03-23 16:58",
+        "time_bj_earliest": "720BC-03-23 14:58",
+        "time_bj_latest": "720BC-03-23 18:58",
+        "delta_from_query_days": 29.2071,
+        "moon_ecl_lat_deg": -2.1096,
+        "eclipse_note": "朔时月球黄纬 |β|=2.11° ≥ 1.5°，不满足日食的必要条件。"
+      }
+    ],
+    "phase_accuracy": "解析式为截断级数，仅用于星历覆盖区间之外的历史回推；结果按 ΔT 不确定度区间交付，不作为唯一时刻。",
+    "method": "analytic_meeus",
+    "ephemeris": "未使用（de421.bsp（1899-07-28 至 2053-10-08） 覆盖之外，已降级为 Meeus 解析式）",
+    "sun_ecl_lon_deg": 326.4999,
+    "moon_ecl_lon_deg": 328.6009,
+    "moon_ecl_lat_deg": 0.2694,
+    "sun_xiu": "室",
+    "moon_xiu": "室",
+    "accuracy": {
+      "sun_ecl_lon_deg": 0.01,
+      "moon_ecl_lon_deg": 0.1,
+      "moon_ecl_lat_deg": 0.1,
+      "moon_phase_min": 5.0,
+      "note": "解析式为截断级数，仅用于星历覆盖区间之外的历史回推；结果按 ΔT 不确定度区间交付，不作为唯一时刻。"
+    }
+  },
+  "discussion": "回推时刻受地球自转长期变化(ΔT)影响存在不确定度，已标注区间；不同学派对文献纪年/干支换算存在分歧，本结果仅作学术交流参考，不构成任何历史事件的唯一结论。",
+  "event_id": 9001,
+  "title": "公元前720年鲁隐公三年日食（文献回推）",
+  "slug": "bce-720-chunqiu-solar-eclipse",
+  "event_type": "historical",
+  "rel_type_hint": "same_type"
+}

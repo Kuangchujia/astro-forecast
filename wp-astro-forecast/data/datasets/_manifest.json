@@ -1,0 +1,58 @@
+{
+  "generated_by": "make_datasets.py",
+  "anchor_date": "2026-09-23",
+  "sets": [
+    {
+      "key": "events_past",
+      "label": "历史天象事件（1900—2025）",
+      "table": "events",
+      "file": "events_past.ndjson",
+      "rows": 4672,
+      "bytes": 7821702,
+      "sha1": "0c3f3b578b8a213130095dd566fb362010453b69",
+      "order": "near_md",
+      "publish_status": 0,
+      "sync_posts": false,
+      "note": "入库为**未发布**：只供「历史上今日天象」栏内联展示，不建详情页、不进归档与站点地图。"
+    },
+    {
+      "key": "daily",
+      "label": "每日天象（地心量，逐日）",
+      "table": "daily",
+      "file": "daily_2026.ndjson",
+      "rows": 730,
+      "bytes": 2325814,
+      "sha1": "f275d71569b0dcc4a163ccc409d13cb9c3df6cf9",
+      "order": "near_date",
+      "publish_status": null,
+      "sync_posts": false,
+      "note": "地心量：日月黄经、月相月龄、地月距离、五星视星等与入宿、二十八宿。与观测地无关。"
+    },
+    {
+      "key": "daily_site",
+      "label": "观测地维度（逐城升落与晨昏）",
+      "table": "daily_site",
+      "file": "site_daily.ndjson",
+      "rows": 43520,
+      "bytes": 19931300,
+      "sha1": "1daef92410ba799f596b28e14c31c0780e19eb4a",
+      "order": "near_date",
+      "publish_status": null,
+      "sync_posts": false,
+      "note": "全国 340 个地级锚点 × 逐日（滚动窗 −7/+120 天）：日出日落、昼长、三种晨昏成对、月出月落。缺此项则「今日天象」的观测地选择会降级。"
+    },
+    {
+      "key": "events_future",
+      "label": "未来天象事件（2026-10 起）",
+      "table": "events",
+      "file": "events_future.ndjson",
+      "rows": 145,
+      "bytes": 193484,
+      "sha1": "a3075c6dc87b812f1d43b9bc1f3cf0849814024a",
+      "order": "time_asc",
+      "publish_status": 1,
+      "sync_posts": true,
+      "note": "入库为已发布，并按其 slug 生成/复用详情页（同 slug 不重复建页）。"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "event_id": 1001,
+  "event_type": "solar_eclipse",
+  "jd_core": 2461619.938229,
+  "jd_scale": "TT (JDE)",
+  "event_time_bj": "2027-08-02 18:30:00",
+  "time_uncertainty": null,
+  "dt_model": "de421+dt_espenak_meeus_2006+tt_scale",
+  "ephemeris": "1899-07-28 至 2053-10-08",
+  "method": "ephemeris_de421",
+  "post_id": 0,
+  "title": "2027年8月2日日全食（中国北方可见偏食）",
+  "slug": "2027-08-02-total-solar-eclipse",
+  "summary": "月球运行至黄白交点附近且为朔，遮挡太阳盘面。中国境内见食带有限，北方部分地区可见偏食，食分随纬度变化。观测须使用专业减光设备，禁止裸眼直视。",
+  "params_json": {
+    "eclipse_type": "total",
+    "magnitude": 1.03,
+    "max_phase_bj": "18:30",
+    "visible_region_cn": "新疆北部、内蒙古、东北部分地区见偏食",
+    "safety_note": "必须使用 ISO 12312-2 认证日食眼镜或投影法，不可用普通墨镜/相机直拍",
+    "data_source": "食分与食带为事件级参数，须由独立食分模块精算后回填；本表为结构样例"
+  },
+  "obs_guide": "以投影法或专用减光片观测；记录当地见食起止与食分；避免任何未减光的光学直视。",
+  "literature": null,
+  "discussion": null,
+  "source_ref": "NASA Solar Eclipse Explorer (eclipse.gsfc.nasa.gov)；星历 DE421",
+  "publish_status": 0,
+  "rel_type_hint": "same_type"
+}

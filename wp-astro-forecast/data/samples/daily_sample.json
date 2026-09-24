@@ -1,0 +1,122 @@
+{
+  "date_str": "2026-09-22",
+  "jd": 2461305.667467,
+  "jd_ut": 2461305.666738,
+  "jd_scale": "TT (JDE)",
+  "tz": "UTC+8",
+  "observer": {
+    "city": "揭阳",
+    "lat": 23.55,
+    "lon": 116.37,
+    "elev_m": 10.0
+  },
+  "data_version": "de421+dt_espenak_meeus_2006+tt_scale",
+  "method": "ephemeris_de421",
+  "ephemeris": "de421.bsp（1899-07-28 至 2053-10-08）",
+  "delta_t_sec": 63.01,
+  "sun": {
+    "ecl_lon_deg": 179.1815,
+    "ecl_lon_j2000_deg": 178.8018,
+    "dec_deg": 0.3255,
+    "sub_solar_lat_deg": 0.3255,
+    "sunrise_bj": "06:04",
+    "sunset_bj": "18:10",
+    "day_length_min": 726,
+    "twilight_civil": {
+      "begin": "05:40",
+      "end": "18:33"
+    },
+    "twilight_nautical": {
+      "begin": "05:14",
+      "end": "19:00"
+    },
+    "twilight_astronomical": {
+      "begin": "04:48",
+      "end": "19:26"
+    }
+  },
+  "moon": {
+    "phase_name": "盈凸月",
+    "phase_deg": 126.26,
+    "moon_age_days": 10.36,
+    "moonrise_bj": "15:29",
+    "moonset_bj": "02:36",
+    "ecl_lon_deg": 305.4416,
+    "ecl_lat_deg": -2.1414,
+    "dec_deg": -20.9844,
+    "angular_diameter_arcmin": 29.96,
+    "distance_km": 398646.5,
+    "distance_error_note": "误差千米量级（民用观测足够；DE421 月球实测精度为千米级，非亚米级）"
+  },
+  "planets": {
+    "mercury": {
+      "ecl_lon_deg": 198.2368,
+      "ecl_lat_deg": -0.6476,
+      "dec_deg": -7.7493,
+      "distance_au": 1.2755,
+      "phase_angle_deg": 45.1,
+      "apparent_mag": -0.22,
+      "mag_note": null,
+      "xiu": "轸",
+      "visibility": "肉眼易见"
+    },
+    "venus": {
+      "ecl_lon_deg": 216.2633,
+      "ecl_lat_deg": -6.1151,
+      "dec_deg": -19.3702,
+      "distance_au": 0.4014,
+      "phase_angle_deg": 122.86,
+      "apparent_mag": -4.56,
+      "mag_note": null,
+      "xiu": "亢",
+      "visibility": "肉眼易见"
+    },
+    "mars": {
+      "ecl_lon_deg": 116.4657,
+      "ecl_lat_deg": 0.8668,
+      "dec_deg": 21.7103,
+      "distance_au": 1.7241,
+      "phase_angle_deg": 82.06,
+      "apparent_mag": 1.92,
+      "mag_note": null,
+      "xiu": "井",
+      "visibility": "肉眼易见"
+    },
+    "jupiter": {
+      "ecl_lon_deg": 137.9581,
+      "ecl_lat_deg": 0.575,
+      "dec_deg": 15.9955,
+      "distance_au": 6.0176,
+      "phase_angle_deg": 131.61,
+      "apparent_mag": -1.22,
+      "mag_note": null,
+      "xiu": "柳",
+      "visibility": "肉眼易见"
+    },
+    "saturn": {
+      "ecl_lon_deg": 12.2598,
+      "ecl_lat_deg": -2.7026,
+      "dec_deg": 2.3559,
+      "distance_au": 8.4578,
+      "phase_angle_deg": 11.93,
+      "apparent_mag": 1.16,
+      "mag_note": "含环贡献未计的近似值",
+      "xiu": "壁",
+      "visibility": "肉眼易见"
+    }
+  },
+  "xiu": {
+    "frame": "黄道宿度（以当日黄道为准；距星表经 skyfield 岁差/章动变换到当日）",
+    "sun_xiu": "翼",
+    "moon_xiu": "牛",
+    "planets_xiu": {
+      "mercury": "轸",
+      "venus": "亢",
+      "mars": "井",
+      "jupiter": "柳",
+      "saturn": "壁"
+    }
+  },
+  "special_event": [],
+  "disclaimer": "天象数据基于 NASA JPL DE421 星历计算；近未来预报时刻精度 ±1 分钟，月球位置误差千米量级。地面观测受天气与大气透明度影响，仅作天文参考，不构成观测保证，不涉及星占、谶纬、吉凶解读。"
+}

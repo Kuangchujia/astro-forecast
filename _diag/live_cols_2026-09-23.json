@@ -1,0 +1,268 @@
+{
+  "beacon_at": "2026-09-23 12:05:28",
+  "beacon_ver": "2.2.6",
+  "cols": {
+    "daily": {
+      "data_json": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 4294967295,
+        "type": "longtext",
+        "unit": "byte"
+      },
+      "data_version": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 64,
+        "type": "varchar(64)",
+        "unit": "byte"
+      },
+      "date_str": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 10,
+        "type": "varchar(10)",
+        "unit": "byte"
+      },
+      "method": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 32,
+        "type": "varchar(32)",
+        "unit": "byte"
+      },
+      "special_event_ids": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 255,
+        "type": "varchar(255)",
+        "unit": "byte"
+      }
+    },
+    "daily_site": {
+      "city": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 32,
+        "type": "varchar(32)",
+        "unit": "byte"
+      },
+      "city_cn": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 32,
+        "type": "varchar(32)",
+        "unit": "byte"
+      },
+      "data_version": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 64,
+        "type": "varchar(64)",
+        "unit": "byte"
+      },
+      "date_str": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 10,
+        "type": "varchar(10)",
+        "unit": "byte"
+      },
+      "method": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 32,
+        "type": "varchar(32)",
+        "unit": "byte"
+      },
+      "moonrise_bj": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 8,
+        "type": "varchar(8)",
+        "unit": "byte"
+      },
+      "moonset_bj": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 8,
+        "type": "varchar(8)",
+        "unit": "byte"
+      },
+      "sunrise_bj": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 8,
+        "type": "varchar(8)",
+        "unit": "byte"
+      },
+      "sunset_bj": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 8,
+        "type": "varchar(8)",
+        "unit": "byte"
+      },
+      "tw_astro_begin": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 8,
+        "type": "varchar(8)",
+        "unit": "byte"
+      },
+      "tw_astro_end": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 8,
+        "type": "varchar(8)",
+        "unit": "byte"
+      },
+      "tw_civil_begin": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 8,
+        "type": "varchar(8)",
+        "unit": "byte"
+      },
+      "tw_civil_end": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 8,
+        "type": "varchar(8)",
+        "unit": "byte"
+      },
+      "tw_nautical_begin": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 8,
+        "type": "varchar(8)",
+        "unit": "byte"
+      },
+      "tw_nautical_end": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 8,
+        "type": "varchar(8)",
+        "unit": "byte"
+      },
+      "tz": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 16,
+        "type": "varchar(16)",
+        "unit": "byte"
+      }
+    },
+    "events": {
+      "discussion": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 65535,
+        "type": "text",
+        "unit": "byte"
+      },
+      "dt_model": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 64,
+        "type": "varchar(64)",
+        "unit": "byte"
+      },
+      "ephemeris": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 191,
+        "type": "varchar(191)",
+        "unit": "byte"
+      },
+      "event_type": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 32,
+        "type": "varchar(32)",
+        "unit": "byte"
+      },
+      "literature": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 65535,
+        "type": "text",
+        "unit": "byte"
+      },
+      "method": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 32,
+        "type": "varchar(32)",
+        "unit": "byte"
+      },
+      "obs_guide": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 65535,
+        "type": "text",
+        "unit": "byte"
+      },
+      "obs_site": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 191,
+        "type": "varchar(191)",
+        "unit": "byte"
+      },
+      "params_json": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 4294967295,
+        "type": "longtext",
+        "unit": "byte"
+      },
+      "slug": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 191,
+        "type": "varchar(191)",
+        "unit": "byte"
+      },
+      "source_ref": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 65535,
+        "type": "text",
+        "unit": "byte"
+      },
+      "summary": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 65535,
+        "type": "text",
+        "unit": "byte"
+      },
+      "time_uncertainty": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 191,
+        "type": "varchar(191)",
+        "unit": "byte"
+      },
+      "title": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 255,
+        "type": "varchar(255)",
+        "unit": "byte"
+      }
+    },
+    "relations": {
+      "rel_type": {
+        "coll": "latin1_swedish_ci",
+        "known": true,
+        "limit": 32,
+        "type": "varchar(32)",
+        "unit": "byte"
+      }
+    }
+  },
+  "recorded_at": "2026-09-23",
+  "source": "公开状态信标 kcj-astro-status.json 的 cols 段（SHOW FULL COLUMNS 直采）"
+}
