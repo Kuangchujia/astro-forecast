@@ -39,6 +39,16 @@ function kcj_astro_forecast_activate() {
         kcj_astro_run_audit('activate');
     }
 
+    // ★ v2.3.10：激活即清一次页面缓存。
+    //   为什么补这一条：缓存键已纳入插件版本号（见 shortcodes.php 的 `_v` 段），
+    //   故「启用新版」本就会换键；此处再显式清一次，是为了**把旧键真正删掉**
+    //   （否则旧 transient 会以「不再命中」的形式留在 options 表里直到过期）。
+    //   ⚠ 但**不能只靠它**：WordPress 的「上传插件」是覆盖替换、**不触发本钩子**，
+    //     故版本号进键才是主判据，本条只是收尾。
+    if (function_exists('kcj_astro_forecast_flush_cache')) {
+        kcj_astro_forecast_flush_cache();
+    }
+
     // ★ v2.2.5：激活即写一次公开状态信标 —— 这样「上传并启用」这件事
     //   在站外**立刻**可见（否则要等人打开一次导入页，才有文件可读）。
     if (function_exists('kcj_astro_beacon_write')) {

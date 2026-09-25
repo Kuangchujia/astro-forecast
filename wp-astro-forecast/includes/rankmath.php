@@ -260,6 +260,114 @@ function kcj_astro_schema_collection($items) {
     ));
 }
 
+/**
+ * 首页「Recommended Starting Reading · 入门推荐」两件学术资产。
+ *
+ * ★ 2026-09-24（F63）新增。起因：用户核出首页最底部那两条 DOI 虽在正文里，
+ *   却**只有 `<ul class="wp-block-list">` 包着**——DOM 与 JSON-LD 里都没有任何语义标记，
+ *   AI 爬虫容易当「普通友链」丢弃。修法＝**两层都给**：
+ *     ① 正文层：两条 `<li>` 加 `itemscope itemtype`（见页面 36 的 content.raw）；
+ *     ② 结构化层：本函数把同两件资产并进站点 @graph（就是这里）。
+ *
+ * ⚠ 硬约束对齐（本文件开头）：**不得为不可见内容声明结构化数据**。
+ *   故此处**不照抄后台文字**，而是声明「首页上确实看得见」的那两件资产。
+ *   若日后首页删了这两条，本节点必须同删 —— 否则又是 F38 那种「架空声明」。
+ *
+ * ⚠ 与既有 `Dataset` 节点不冲突：那个是**每日天象数据集**（揭阳·逐日），
+ *   这两件是**历法数据集与预印本**，`@id` 各自带独立 fragment。
+ *
+ * @return array 两节点（ScholarlyArticle ＋ Dataset）
+ * @param array $which array('paper'=>bool,'dataset'=>bool) —— 逐件开关；
+ *                     传空数组＝两件都发（向后兼容）。
+ */
+function kcj_astro_schema_front_assets($which = array()) {
+    $all   = empty($which);
+    $want  = function ($k) use ($which, $all) { return $all || !empty($which[$k]); };
+    $home = home_url('/');
+    // ★ 2026-09-25 修（Google 富结果校验 5 处缺陷）：原写法是**纯 @id 引用**，两处致命：
+    //   ① `$who` 的 @id 拼成 `#person-author`，而图中只有 `#person` ⇒ **悬空引用**；
+    //   ② `$pub` 指向 `https://zenodo.org`，该 @id **图内不存在**，且无 `name` ⇒ 校验器判「应指定 name 或 url」。
+    //   修法：**一律内联 name／url**，不再依赖跨节点解析（Google 校验器不解析 @graph 内引用）。
+    $who  = array(
+        '@type' => 'Person',
+        '@id'   => $home . '#person',          // ← 纠正：与图内 #person 节点同 id
+        'name'  => '邝楚嘉 Chujia Kuang',
+        'url'   => $home,
+    );
+    $pub  = array(
+        '@type' => 'Organization',
+        '@id'   => 'https://zenodo.org',
+        'name'  => 'Zenodo',
+        'url'   => 'https://zenodo.org/',
+    );
+    // 数据集的上级容器：原用 `#webpage`（＝当前页面），语义错位（页面不是数据集的父容器）。
+    // 改指「站点」这一稳定容器，并内联 name／url。
+    $partof = array(
+        '@type' => 'WebSite',
+        '@id'   => $home . '#website',
+        'name'  => '邝楚嘉 Chujia Kuang — Chinese Calendrics & Solar Terms',
+        'url'   => $home,
+    );
+    $out = array();
+
+    // ① 预印本（002 · 换岁节点考据）
+    if ($want('paper')) {
+        $out[] = array(
+            '@type'            => 'ScholarlyArticle',
+            '@id'              => $home . '#asset-preprint-year-turn',
+            'name'             => 'When Does the Year Turn: at Lichun, or at the First Day of the First Month?',
+            'alternativeHeadline' => '立春换岁，还是正月初一换岁？',
+            'abstract'         => '中国历法换岁节点的原始文献考据：立春换岁与正月初一换岁两说的来历与文献依据。',
+            'inLanguage'       => array('en', 'zh-Hans'),
+            'author'           => $who,
+            'publisher'        => $pub,
+            'isPartOf'         => $partof,
+            'identifier'       => array(
+                '@type' => 'PropertyValue',
+                'propertyID' => 'DOI',
+                'value'  => '10.5281/zenodo.22803746',
+            ),
+            'sameAs'           => 'https://doi.org/10.5281/zenodo.22803746',
+            'url'              => 'https://doi.org/10.5281/zenodo.22803746',
+            'license'          => 'https://creativecommons.org/licenses/by/4.0/',
+            'creativeWorkStatus' => 'Preprint',
+            'mainEntityOfPage' => array('@type' => 'WebPage', '@id' => $home . '#webpage'),
+            'isAccessibleForFree' => true,
+        );
+    }
+
+    // ② 开放数据集（chinese-calendar-dataset）
+    if ($want('dataset')) {
+        $out[] = array(
+            '@type'            => 'Dataset',
+            '@id'              => $home . '#asset-calendar-datasets',
+            'name'             => 'Chinese Calendar Open Datasets',
+            'version'          => '1.0.0',
+            // ★ 2026-09-25：原 36 字被判「description 字符串长度无效（过短）」⇒ 扩写到 150+ 字，
+            //   交代数据内容、时间跨度、文件形态与用途（面向检索与复用者，非营销语）。
+            'description'      => '中国历法开放数据集（Chinese Calendar Open Datasets）：收录干支纪日与纪年的推排结果、'
+                . '二十四节气逐年交节时刻、历代历法改革（岁首与置闰变更）对照表，以及中国古代天象记录的整理条目。'
+                . '数据以 CSV 与 JSON 两种格式随预印本一并公开，供天文史、历法史与数字人文研究核验与复用。',
+            'inLanguage'       => array('en', 'zh-Hans'),
+            'creator'          => $who,
+            'publisher'        => $pub,
+            'isPartOf'         => $partof,
+            'identifier'       => array(
+                '@type' => 'PropertyValue',
+                'propertyID' => 'DOI',
+                'value'  => '10.5281/zenodo.22788686',
+            ),
+            'sameAs'           => 'https://doi.org/10.5281/zenodo.22788686',
+            'url'              => 'https://doi.org/10.5281/zenodo.22788686',
+            'codeRepository'   => 'https://github.com/Kuangchujia/chinese-calendar-dataset',
+            'license'          => 'https://creativecommons.org/licenses/by/4.0/',
+            'isAccessibleForFree' => true,
+        );
+    }
+
+    return $out;
+}
+
 /* --------------------------- 输出 --------------------------- */
 
 /** 供模板调用：给定上下文与数据，返回应输出的节点数组 */
@@ -288,6 +396,15 @@ function kcj_astro_schema_nodes($context, $payload = array()) {
             return kcj_astro_schema_should_emit('CollectionPage')
                 ? kcj_astro_schema_collection(isset($payload['items']) ? $payload['items'] : array())
                 : array();
+        case 'front':
+            // ★ 2026-09-24（F63）：首页两件学术资产（预印本 ＋ 数据集）。
+            //   与 daily 分支的差别：daily 要「页面确实渲染出今日天象」才发节点；
+            //   这里同样守「可见才声明」——判据是**正文里确实有那两条**（见 payload 分支）。
+            //   payload['assets'] 是逐件布尔：缺哪件就只发另一件。
+            if (empty($payload['assets'])) {
+                return array();
+            }
+            return kcj_astro_schema_front_assets($payload['assets']);
     }
     return array();
 }
@@ -356,6 +473,13 @@ function kcj_astro_schema_context() {
         || (function_exists('is_tax') && is_tax(KCJ_ASTRO_TAX))) {
         return 'collection';
     }
+    // ★ 2026-09-24（F63）：首页单列一类 —— 它有「两件学术资产」这一独有内容，
+    //   既不是 CPT 详情／归档，也不该被归进 daily（daily 的语义是「逐日天象数据」）。
+    //   ⚠ 判据**必须严**：只看 is_front_page()；**不可**用 `$data` 是否为空之类
+    //     的间接迹象 —— 同页在不同插件状态下 $data 会变（见下方优先级 5 的说明）。
+    if (function_exists('is_front_page') && is_front_page()) {
+        return 'front';
+    }
     return 'daily';
 }
 
@@ -415,6 +539,21 @@ function kcj_astro_schema_payload() {
         $tbl = KCJ_Astro_DB::table('events');
         $ev  = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$tbl} WHERE post_id = %d LIMIT 1", $post_id), ARRAY_A);
         return $ev ? array('ev' => $ev) : array();
+    }
+
+    // front：判据是「首页正文里**确实有**那两条」。用两个 DOI 号做锚 ——
+    // ★ 为什么锚 DOI 而不锚栏目名或 <li>：栏目名是文案、会改；<li> 太泛（首页还有别的列表）。
+    //   DOI 是**资产本身的永久标识**，它出现 ⇔ 资产在该页可见。
+    // ⚠ 一旦首页删掉某一条，对应节点即自动不发 —— 守「不可见不声明」。
+    if ($ctx === 'front') {
+        $pid  = get_the_ID();
+        $body = $pid ? (string) get_post_field('post_content', $pid) : '';
+        $has_paper = (strpos($body, 'zenodo.22803746') !== false);
+        $has_data  = (strpos($body, 'zenodo.22788686') !== false);
+        if (!$has_paper && !$has_data) {
+            return array();
+        }
+        return array('assets' => array('paper' => $has_paper, 'dataset' => $has_data));
     }
 
     if ($ctx === 'collection') {

@@ -29,6 +29,23 @@ SKIP_DIRS = {"__pycache__", ".git", ".svn", ".idea", ".vscode", "node_modules"}
 SKIP_FILES = {".DS_Store", "Thumbs.db", "desktop.ini"}
 SKIP_EXT = {".pyc", ".pyo", ".bak", ".bak1", ".bak2", ".log", ".orig", ".rej", ".zip"}
 
+
+def is_backup(fn):
+    """★ 备份件判据：以 .bak 起头的**任意后缀**都算（.bak / .bak1 / .bak-c298 / .bak-20260924）。
+
+    为什么不能只用 `os.path.splitext(fn)[1] in SKIP_EXT`：
+      `wp-astro-forecast.php.bak-c298` 的 splitext 结果是 `('.php.bak-c298', '.bak-c298')`
+      —— **带日期的备份后缀不在 SKIP_EXT 里**，于是会静默打进包。
+      实测踩过：c298 轮改完打 zip，`wp-astro-forecast.php.bak-c298` 进了包（多出 46,856 B）。
+    """
+    low = fn.lower()
+    if ".bak" not in low:
+        return False
+    # 只看第一个 .bak 之后的形态：.bak / .bak1 / .bak-c298 / .bak.20260924 全收
+    tail = low[low.index(".bak") + 4:]
+    return tail == "" or tail[0] in "-._" or tail.isdigit()
+
+
 # 固定时间戳（1980-01-01 是 ZIP 格式下限；用固定值换取**字节可复现**）
 FIXED_DT = (1980, 1, 1, 0, 0, 0)
 
@@ -42,7 +59,7 @@ def collect(root):
     for dirpath, dirnames, filenames in os.walk(base):
         dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
         for fn in sorted(filenames):
-            if fn in SKIP_FILES or os.path.splitext(fn)[1].lower() in SKIP_EXT:
+            if fn in SKIP_FILES or os.path.splitext(fn)[1].lower() in SKIP_EXT or is_backup(fn):
                 continue
             full = os.path.join(dirpath, fn)
             rel = os.path.relpath(full, root).replace(os.sep, "/")
@@ -113,8 +130,13 @@ def main():
         # 每个 .php 都要进包 —— 漏一个 includes/ 就是一次线上 500
         php_on_disk = set(r for r, _ in entries if r.endswith(".php"))
         chk("全部 .php 均已进包（%d 个）" % len(php_on_disk), len(php_on_disk) > 0)
-        stale = [r for r, _ in entries if os.path.splitext(r)[1].lower() in SKIP_EXT]
-        chk("包内无缓存/备份件", not stale, "命中 %s" % stale)
+        # ★ 备份件判据：**用 is_backup()**，不要只用 splitext 的扩展名。
+        #   旧写法 `os.path.splitext(r)[1] in SKIP_EXT` 对
+        #   `x.php.bak-c298` 求出的扩展名是 `.bak-c298` ⇒ **命中不了**
+        #   ⇒ 这条自检本身是**空壳**（判据与被测对象不对齐，同第①病族）。
+        stale = [r for r, _ in entries
+                 if os.path.splitext(r)[1].lower() in SKIP_EXT or is_backup(os.path.basename(r))]
+        chk("包内无缓存/备份件（含 .bak-* 带日期后缀）", not stale, "命中 %s" % stale)
         print("  —— 自检合计：通过 %d 项，失败 %d 项" % (ok, len(fails)))
         # ★ 本轮踩坑：`--selftest` 只检不写（见上面的 return），但输出里不说，
         #   极易被读成「已重新打包、校验也过了」⇒ 实际 zip 还是旧包，

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WordPress 中英双语 hreflang 诊断与方案 · 2026-09-25</title>
+<style>
+  :root{--ink:#1d1d1f;--ink2:#4a4a4f;--line:#e2e2e6;--bg:#fbfbfc;--card:#fff;
+        --red:#b3261e;--grn:#1a7f4b;--amb:#a86600;--blu:#1a5fb4;--soft:#f2f2f5}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.75 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+       padding:32px 18px 72px}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:25px;line-height:1.35;margin:0 0 6px;letter-spacing:.2px}
+  .sub{color:var(--ink2);font-size:13.5px;margin:0 0 26px}
+  h2{font-size:18px;margin:34px 0 12px;padding-left:11px;border-left:4px solid var(--ink);
+     line-height:1.4}
+  h3{font-size:15.5px;margin:22px 0 8px;color:var(--ink)}
+  p{margin:9px 0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+        padding:16px 18px;margin:14px 0}
+  .verdict{background:#fff8f7;border:1px solid #f0cfcb;border-left:4px solid var(--red);
+           border-radius:8px;padding:14px 18px;margin:16px 0}
+  .ok{background:#f3fbf6;border:1px solid #cfe9da;border-left:4px solid var(--grn);
+      border-radius:8px;padding:14px 18px;margin:16px 0}
+  .warn{background:#fffbf2;border:1px solid #f0e0c0;border-left:4px solid var(--amb);
+        border-radius:8px;padding:14px 18px;margin:16px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px;
+        background:var(--card)}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:var(--soft);font-weight:600;white-space:nowrap}
+  code{background:var(--soft);padding:1px 5px;border-radius:4px;
+       font:13px/1.5 "Cascadia Mono",Consolas,monospace}
+  pre{background:#1f2226;color:#e8e8ea;padding:13px 15px;border-radius:8px;
+      overflow-x:auto;font:12.5px/1.6 "Cascadia Mono",Consolas,monospace;margin:12px 0}
+  pre .c{color:#8b949e}
+  .tag{display:inline-block;font-size:11.5px;padding:1.5px 7px;border-radius:20px;
+       border:1px solid;vertical-align:1px;white-space:nowrap}
+  .t-red{color:var(--red);border-color:#e8b9b4;background:#fdf2f1}
+  .t-grn{color:var(--grn);border-color:#bfe0cd;background:#f1faf5}
+  .t-amb{color:var(--amb);border-color:#e8d5ae;background:#fdf8ee}
+  .t-blu{color:var(--blu);border-color:#bdd3ee;background:#f2f7fd}
+  ul,ol{margin:9px 0;padding-left:23px}
+  li{margin:5px 0}
+  .layers{counter-reset:L}
+  .layers>li{list-style:none;position:relative;padding-left:34px;margin:12px 0}
+  .layers>li:before{counter-increment:L;content:counter(L);position:absolute;left:0;top:1px;
+      width:22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;
+      font-size:12px;font-weight:700;text-align:center;line-height:22px}
+  .kv{display:grid;grid-template-columns:120px 1fr;gap:6px 14px;font-size:13.5px}
+  .kv b{font-weight:600;color:var(--ink2)}
+  hr{border:0;border-top:1px solid var(--line);margin:30px 0}
+  .tiny{font-size:12.5px;color:var(--ink2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>WordPress 中英双语 hreflang：诊断与方案</h1>
+<p class="sub">kuangchujia.com｜核验时点 2026-09-25 13:2x（GMT+8）｜全部结论取自线上实测与本地源码逐行核对</p>
+
+<div class="verdict">
+  <b>先说结论，三点。</b>
+  <ol>
+    <li><b>你的判断方向对，但实况比「完全没做」更复杂：站点不是没有 hreflang，而是「做了、分三层、缺一层」。</b>
+        语言子页（16 个）<b>已经完整合规</b>，父栏目页也合规 —— 这是插件 v2.3.7/v2.3.8 早前做过的手艺。</li>
+    <li><b>真正的缺口在文章页（post）：一条都不出。</b>你举的《立春换岁》正是这一类，确实零互指。
+        根因是 <code>includes/hreflang.php</code> 第 81 行一句 <code>if (!is_page()) return $empty;</code> ——
+        文章是 post，<code>is_page()</code> 恒为 false，整条支路被挡死。</li>
+    <li><b>不需要装多语言插件，也不必改 Rank Math。</b>插件里那套「按父子关系＋slug 配对」的现成机制，
+        只要把它从 <code>page</code> 扩到 <code>post</code> 即可 ——
+        且文章侧已有比 slug 更权威的配对锚：<b>WordPress 分类「中文版」(63494103) / 「英文版」(63494104)</b>，
+        22 篇 post 已全部正确归类。</li>
+  </ol>
+</div>
+
+<h2>一、hreflang 到底是干什么的（一句话）</h2>
+<p>它是给搜索引擎的<b>「这两页是同一篇内容的两个语言版本」声明书</b>，不是翻译插件、不影响页面显示。
+写了，Google 会把中英两版<b>合并成一个成果条目</b>、把权重并到一处、按读者语言择优展示；
+不写，Google 视作两篇独立网页 —— 学术产出上就会被当成<b>重复内容</b>，这正是你担心的权重分散。</p>
+
+<div class="warn">
+  <b>★ 它是双向契约。</b>A 页声明 B 是它的英文版，<b>B 也必须声明 A 是它的中文版</b>；<b>缺一侧则整组作废</b>。
+  这一条是本方案所有设计的出发点。
+</div>
+
+<h2>二、线上实测：三层现状（逐页取源码，非推测）</h2>
+
+<table>
+  <thead><tr><th>页面类型</th><th>实测输出</th><th>条数</th><th>判定</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>① 语言子页</b><br><span class="tiny">/publications/zh/ · /publications/en/ 等 16 个</span></td>
+      <td><code>zh-CN</code>→中文页<br><code>en</code>→英文页<br><code>x-default</code>→中文页</td>
+      <td>3</td>
+      <td><span class="tag t-grn">合规</span><br><span class="tiny">双向互指成立</span></td>
+    </tr>
+    <tr>
+      <td><b>② 父栏目页</b><br><span class="tiny">/publications/ · /about/ 等</span></td>
+      <td><code>x-default</code>→自身</td>
+      <td>1</td>
+      <td><span class="tag t-grn">合规</span><br><span class="tiny">双语 Tab 单页，不宣称自己是某一语言版</span></td>
+    </tr>
+    <tr>
+      <td><b>③ 文章页</b> <span class="tag t-red">缺口</span><br><span class="tiny">22 篇 post，含《立春换岁》</span></td>
+      <td><b>无任何 hreflang</b></td>
+      <td><b>0</b></td>
+      <td><span class="tag t-red">缺失</span></td>
+    </tr>
+    <tr>
+      <td><b>④ 首页 /</b> <span class="tag t-amb">存疑</span></td>
+      <td><code>x-default</code>→/<br><code>zh</code>→/<br><code>en</code>→/en/</td>
+      <td>3</td>
+      <td><span class="tag t-amb">单侧</span><br><span class="tiny">/en/ 侧一条都没有 ⇒ 整组作废</span></td>
+    </tr>
+    <tr>
+      <td>⑤ 归档 /all-posts/ · 栏目页 /tianwen-rili/</td>
+      <td>0 条 / 1 条 x-default</td>
+      <td>—</td>
+      <td><span class="tag t-grn">合规</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>缺口根因（源码逐行核到）</h3>
+<pre><span class="c">// includes/hreflang.php:81  —— 一句挡死了全部文章页</span>
+if (!function_exists('is_page') || !is_page()) {
+    return $empty;      <span class="c">// ← 文章是 post，is_page() 恒 false，直接返回空</span>
+}</pre>
+<p class="tiny">文件头 L24–34 把「三类页面」写成「语言子页 / 父栏目页 / <b>其余页（首页、文章、CPT、归档）</b>」——
+    文章被归进「其余页」只出 x-default，而 <code>is_page()</code> 这道闸连 x-default 都没让它出去。
+    ⇒ <b>设计与实现对不上，是这次缺口的直接来源。</b></p>
+
+<h3>首页那三条为什么判「作废」</h3>
+<p>首页出了 <code>en → /en/</code>，但 <b><code>/en/</code> 页面侧一条 hreflang 都没有</b>（实测 0 条）。
+双向契约缺一侧 ⇒ Google 整组忽略。且首页那三条的属性顺序与插件输出不同（<code>rel→href→hreflang</code> vs 插件 <code>rel→hreflang→href</code>）
+⇒ <b>确认来自另一层（主题或 Rank Math），非本插件</b>。这一层需要单独定位后再处置。</p>
+
+<h2>三、配对的数据基础：文章侧比页面侧更权威</h2>
+<p>页面侧靠「父子关系＋slug <code>zh</code>/<code>en</code>」配对，这已证明是好办法。文章侧则<b>不必猜</b>——线上已有两条现成的锚：</p>
+<div class="kv card">
+  <b>分类</b><span><code>中文版</code> id 63494103（17 篇）｜<code>英文版</code> id 63494104（5 篇）</span>
+  <b>正文宣言</b><span>每篇英文正文自带「<i>This English version is issued alongside the Chinese original as the same article</i>」</span>
+  <b>分类归属</b><span>22 篇 <b>全部正确</b>（已逐篇核 <code>categories</code> 字段）</span>
+</div>
+
+<h3>已确证的 5 对中英文章</h3>
+<table>
+  <thead><tr><th>中文 post</th><th>英文 post</th><th>配对依据</th></tr></thead>
+  <tbody>
+    <tr><td>三本历法·三种时间 <code>10</code></td><td>Three Calendars, Three Kinds of Time <code>190</code></td><td>标题＋正文宣言</td></tr>
+    <tr><td>十个字配十二个字，为什么只剩六十组 <code>841</code></td><td>Ten Stems, Twelve Branches <code>193</code></td><td>标题＋正文宣言</td></tr>
+    <tr><td>抬头与低头之间 <code>2422</code></td><td>Between Looking Up and Looking Down <code>2425</code></td><td>标题＋正文宣言</td></tr>
+    <tr><td>尧典四仲中星：一组对不上的数字 <code>2423</code></td><td>The Four Fixed Stars of the <i>Yaodian</i> <code>2426</code></td><td>标题＋正文宣言</td></tr>
+    <tr><td>甲骨文「日有食之」诸条的可核验性 <code>2424</code></td><td>The Verifiability of the Oracle-Bone Records <code>2427</code></td><td>标题＋正文宣言</td></tr>
+  </tbody>
+</table>
+<p class="tiny">余下 17 篇为纯中文，无英文对手 ⇒ 按现有口径<b>只出 <code>x-default</code> 指自身</b>，不出 <code>zh</code>（避免「自称中文版」的反向失真）。</p>
+
+<div class="warn">
+  <b>★ 顺带查出的一处隐患（不属本次任务，但必须报）：</b><br>
+  本地正本 <code>07-分发/WordPress/</code> 的<b>篇号命名与线上真实配对不一致</b> ——
+  例如 <code>002</code> 篇号下，中文是《立春换岁》、英文却是 <code>Eclipse-Records-on-Oracle-Bones</code>（甲骨文日有食之），
+  <b>二者不是互译</b>。若照本地命名表做配对，会配出错关系。
+  ⇒ <b>本方案一律以线上分类字段为锚，不用本地文件名推配对。</b>本地命名问题另行处置。
+</div>
+
+<h2>四、解决办法：三层，按代价从小到大</h2>
+
+<ol class="layers">
+  <li>
+    <b>主力方案（推荐 · 改一个支路即可）</b><br>
+    在 <code>includes/hreflang.php</code> 里<b>把 article 支路补上</b>，判据改用<b>分类锚</b>而非 slug：
+    <pre><span class="c">// 文章页配对（新增）—— 不靠写死 ID，靠「同分类体系内的互译标记」</span>
+· 命中 post ⇒ 读它的 categories
+· 含 <code>63494104</code>(英文版) ⇒ 本页为 EN，去找它在中文版的对手
+· 含 <code>63494103</code>(中文版) ⇒ 本页为 ZH，去找它在英文版的对手
+· 配对锚落库 ⇒ 输出 zh-CN / en / x-default 三条（x-default 依旧指中文）
+· 配对不齐 ⇒ 只出 x-default 指自身（沿用现成的「宁缺勿造」纪律）</pre>
+    <b>关键问题：怎么知道 190 对应的是 10？</b>三种可选锚，按可靠性排序：
+    <table>
+      <thead><tr><th>锚</th><th>做法</th><th>评价</th></tr></thead>
+      <tbody>
+        <tr><td><b>A. 互译 ID 元字段</b></td>
+            <td>给每篇 post 加一个 <code>translation_of</code> 自定义字段，存对手 post id</td>
+            <td><span class="tag t-grn">最稳</span> 双向、显式、改版不失效；需一次性回填 5 对</td></tr>
+        <tr><td><b>B. slug 约定</b></td>
+            <td>约定同篇中英 slug 前缀一致</td>
+            <td><span class="tag t-amb">不合适</span> 现状中英 slug 完全不同（中文是 URL 编码），无法靠前缀配</td></tr>
+        <tr><td><b>C. 标题/正文相似度猜</b></td>
+            <td>自动比对</td>
+            <td><span class="tag t-red">不用</span> 违背本项目「不猜」纪律；会把《立春换岁》那类错配当互译</td></tr>
+      </tbody>
+    </table>
+    ⇒ <b>建议取 A</b>：加一个元字段，5 对回填一次，之后每篇新英文稿发布时同步填。<br>
+    <span class="tiny">若你希望零改后台，退一步可用「篇号 ＋ 语言分类」组合做锚（英文版分类内的 post 找同篇号中文 post），
+    但本地篇号现有错配，须先把命名理干净 —— 不如 A 直接。</span>
+  </li>
+  <li>
+    <b>顺带修首页那三条（小）</b><br>
+    先定位那层是谁输出的（主题 or Rank Math）；两种走法——
+    ① 让它对 <code>/en/</code> 也输出对等三条（补全双向）；
+    ② 或把首页从该层排除，改由插件统一输出（口径一致）。<b>建议 ②</b>：一处输出、一处口径、便于核对。
+  </li>
+  <li>
+    <b>不要做的事（避免引入新病）</b>
+    <ul>
+      <li><b>不装多语言插件</b>（Polylang/WPML）：站点不是多语言架构，装了要重排全站 URL，代价远超收益。</li>
+      <li><b>不改 Rank Math</b>：免费版无 hreflang filter，动它没有着力点。</li>
+      <li><b>不写 <code>canonical</code>/<code>robots</code></b>：那是 SEO 插件的面，越界会打架（插件本身也已守此边界）。</li>
+      <li><b>不靠猜配对</b>：宁可只出 <code>x-default</code>，也不给错关系 —— 错配对比不配对更伤。</li>
+    </ul>
+  </li>
+</ol>
+
+<h2>五、验收判据（改完怎么算过）</h2>
+<table>
+  <thead><tr><th>#</th><th>判据</th><th>取样</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>5 对文章页<b>各自</b>出齐 <code>zh-CN</code>/<code>en</code>/<code>x-default</code> 三条，且 <code>x-default</code> 指中文页</td><td>10/190 · 841/193 · 2422/2425 · 2423/2426 · 2424/2427</td></tr>
+    <tr><td>2</td><td><b>双向成立</b>：中页指英页、英页指中页，href 互为对方</td><td>同上 10 页</td></tr>
+    <tr><td>3</td><td>纯中文文章只出 1 条 <code>x-default</code> 指自身，<b>不出 <code>zh</code></b></td><td>23《立春换岁》· 69 · 834 等</td></tr>
+    <tr><td>4</td><td><b>零回归</b>：16 个语言子页仍是 3 条、父栏目页仍是 1 条</td><td>全量 16＋8</td></tr>
+    <tr><td>5</td><td>不存在 <code>hreflang</code> href 指向 <b>404</b> 或指向自身组之外</td><td>全量扫一遍 href 可达性</td></tr>
+    <tr><td>6</td><td>首页组<b>双向齐备</b>（<code>/</code> ↔ <code>/en/</code> 互指）</td><td>2 页</td></tr>
+  </tbody>
+</table>
+<p class="tiny">取线上页须带破缓存参数（<code>?cb=&lt;时间戳&gt;</code>）—— WordPress.com 静态资源三层缓存；
+但 HTML 页本身不受影响（本项目已实测）。</p>
+
+<h2>六、如实报：三件我核到但未定的事</h2>
+<ol>
+  <li><b>首页那三条是哪一层输出的</b> —— 已确认「非本插件」（属性顺序不同），但主题侧源码不在本地，
+      需上线层面再定。⇒ <b>未定</b>。</li>
+  <li><b>本地篇号命名与线上配对不一致</b>（002 篇号错配）—— <b>已核实存在</b>，
+      但「是否要顺带把本地命名理正」超出本任务范围，且牵动 07-分发 全目录。⇒ <b>待你裁</b>。</li>
+  <li><b>5 对配对锚选择</b>（元字段 A / 篇号组合 C）—— 我倾向 A，
+      但涉及改后台字段结构，<b>不由我替你定</b>。⇒ <b>待你裁</b>。</li>
+</ol>
+
+<hr>
+<p class="tiny">本报告全部数据来源：① 线上 <code>kuangchujia.com</code> 逐页抓 <code>&lt;head&gt;</code>（含破缓存复测）；
+② WordPress REST API 逐篇核 <code>categories</code>／<code>title</code> 字段（22 篇 post ＋ 4 个分类）；
+③ 本地插件源码逐行读 <code>includes/hreflang.php</code>（213 行）与 <code>docs/hreflang.md</code>。
+凡未实测处均已标「未定/待裁」，无推测成分。</p>
+
+</div>
+</body>
+</html>

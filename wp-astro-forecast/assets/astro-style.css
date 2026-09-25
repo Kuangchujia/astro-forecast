@@ -137,6 +137,18 @@
   padding-top: 10px;
   margin-top: 16px;
 }
+/* v2.3.13（F64）：科学定性句 —— 数据块**首**的「这是什么、怎么来的、干什么用」。
+   ★ 与 .kcj-astro-disclaimer（块尾·灰字技术免责）**刻意区分**：
+     本句是全文里最该被 AI 抽取的一段，故须**看得见、认得准**——
+     左朱砂竖线 ＋ 略大的字号 ＋ 深一档的字色；但不加粗、不引号堆砌（那是宣传腔，非学术腔）。 */
+.kcj-astro-verdict {
+  font-size: 14.5px;
+  line-height: 1.75;
+  color: #444;
+  border-left: 3px solid var(--kcj-cinnabar);
+  padding: 2px 0 2px 12px;
+  margin: 10px 0 14px;
+}
 .kcj-astro-disclaimer-block { margin-top: 18px; }
 .kcj-astro-special { background: #fff4e6; border: 1px solid #ffd8a8; border-radius: 6px; padding: 8px 10px; font-size: 14px; }
 .kcj-astro-special ul { margin: 6px 0 0; padding-left: 18px; }
@@ -788,4 +800,4 @@
 .kcj-astro-places-back:hover { color: var(--kcj-cinnabar); border-bottom-color: var(--kcj-cinnabar); }
 .kcj-astro-hub-title { margin: 0 0 10px; font-size: 16px; }
 
-/* kcj-astro-version: 2.3.7 */
+/* kcj-astro-version: 2.3.16 */

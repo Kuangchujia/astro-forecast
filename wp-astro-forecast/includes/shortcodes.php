@@ -48,11 +48,9 @@ add_action('wp_enqueue_scripts', function () {
         array(), KCJ_ASTRO_VER, true);
 });
 
-/** 默认观测地键与中文名（与 compute_sky.CONFIG.OBS_CITY_KEY 一致：北京）
- *  ★ 开源发布注（2026-09-24）：默认地由作者常住地改为**北京**（中性默认）。
- *    部署时按需改这里 ＋ compute_sky.CONFIG.OBS_* 三行，两处必须同改。 */
+/** 默认观测地键与中文名（与 compute_sky.CONFIG.OBS_CITY_KEY 一致：揭阳） */
 function kcj_astro_default_place() {
-    return array('key' => 'beijing', 'cn' => '北京');
+    return array('key' => 'jieyang', 'cn' => '揭阳');
 }
 
 /**
@@ -205,6 +203,7 @@ function kcj_astro_notice($text, $cls = 'kcj-astro-nodata') {
     return '<p class="' . esc_attr($cls) . '">' . esc_html($text) . '</p>';
 }
 
+
 /* -------------------------------------------------------------------------
  * 短代码 8：观测地总览页（v2.3.6）
  *
@@ -347,9 +346,9 @@ add_shortcode('astro_places_hub', function ($atts) {
 });
 
 /* -------------------------------------------------------------------------
-/* -------------------------------------------------------------------------
  * 短代码 1：今日天象
  * ---------------------------------------------------------------------- */
+
 
 add_shortcode('astro_today', function ($atts) {
     global $wpdb;
@@ -382,9 +381,20 @@ add_shortcode('astro_today', function ($atts) {
     //        transient 的值可能在对象缓存里，删表删不掉它，表现为「清了缓存页面还是旧的」。
     //        ⇒ 改为「纪元号 +1」（缓存键随之改变，旧键自然失效，不依赖能否删掉）+ 逐键 delete_transient。
     //   纪元号是**自动加载**的单值 option，代价可忽略；它一变，所有旧键同时作废。
+    //   ★★ v2.3.10：缓存键**再纳入插件版本号**（`_v` 段）。
+    //   为什么必须加这一段（本轮实测踩到）：
+    //     缓存键原先只有「日期 ＋ 模式 ＋ 有无表 ＋ 数据纪元」，**与插件代码版本无关**。
+    //     于是「上传新版本插件包」这件事**不改变任何键** ⇒ 旧版本渲染出来的 HTML
+    //     在 12 小时档里继续被端上来，表现为「代码已是新版、前台还是旧结构」，
+    //     而 CDN 直穿源站也一样（源站自己就在发旧 HTML）⇒ 会把排查引向错误的缓存层。
+    //   为什么不能只靠钩子清：WordPress 的**「上传插件」是覆盖替换，不触发 activate 钩子**
+    //     （activate 只在「启用」时跑）⇒ 依赖 activate 清缓存 = 每次发版都可能漏清。
+    //     版本号进键，则「发新版」**在定义上**就让旧键失效，不依赖任何钩子是否被调到。
+    //   ⇒ 三条失效依据：数据纪元（数据变）／插件版本（代码变）／日期模式（维度变）。
     $epoch     = kcj_astro_data_epoch();
     $cache_key = 'kcj_astro_today_' . $date . '_' . $place . '_'
-        . ($sites_table_exists ? '1' : '0') . '_e' . $epoch;
+        . ($sites_table_exists ? '1' : '0') . '_e' . $epoch
+        . '_v' . (defined('KCJ_ASTRO_VER') ? preg_replace('/[^0-9A-Za-z.]/', '', (string) KCJ_ASTRO_VER) : '0');
     $html = get_transient($cache_key);
     if (false === $html) {
         $degraded = false;   // 渲染结果是否「降级」（缺当日地心量或缺观测地表）
@@ -467,8 +477,51 @@ function kcj_astro_load_places($date) {
         return array();
     }
     kcj_astro_audit_places($date, count($rows));
+    return kcj_astro_rows_to_places($rows);
+}
+
+/**
+ * 取某日**单个锚点**的观测地行（带 WHERE city = … 的精确查询，不扫全表）。
+ *
+ * 为什么需要它（v2.3.10）：首页瘦身后只内联 1 座城，当读者的**存档城**与页面当前城
+ * 不同时，前端需要一个「只取那一城」的公开通道。若复用 kcj_astro_load_places()
+ * 则是无 LIMIT 的 340 行全扫 —— 为一个城付 340 城的代价，故单列此函数。
+ *
+ * @return array|null 与 kcj_astro_load_places() 的值同结构；查不到返 null。
+ */
+function kcj_astro_load_place_one($date, $city) {
+    global $wpdb;
+    $city = (string) $city;
+    if ($city === '') { return null; }
+    $tbl = KCJ_Astro_DB::table('daily_site');
+    if (!$tbl) { return null; }
+    $row = $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT city, city_cn, lat, lon, elev_m, tz, sunrise_bj, sunset_bj, day_length_min,
+                    tw_civil_begin, tw_civil_end, tw_nautical_begin, tw_nautical_end,
+                    tw_astro_begin, tw_astro_end, moonrise_bj, moonset_bj
+             FROM {$tbl} WHERE date_str = %s AND city = %s LIMIT 1",
+            $date,
+            $city
+        ),
+        ARRAY_A
+    );
+    if (!$row) { return null; }
+    $all = kcj_astro_rows_to_places(array($row));
+    return isset($all[$city]) ? $all[$city] : null;
+}
+
+/**
+ * 库表行 → 「city_key => 具名数组」的唯一转换点（v2.3.10 抽出）。
+ *
+ * 为什么抽出来：这段字段搬运原先只写在 kcj_astro_load_places() 里，
+ *   v2.3.10 新增单城查询后若**另写一份**，两处的列名/类型一旦不同步，
+ *   就会出现「列表页对、单城接口错」这类只在特定路径下暴露的缺陷。
+ *   ⇒ 收敛到一处，新增取数入口一律复用它。
+ */
+function kcj_astro_rows_to_places($rows) {
     $out = array();
-    foreach ($rows as $r) {
+    foreach ((array) $rows as $r) {
         $out[(string) $r['city']] = array(
             'cn'      => (string) $r['city_cn'],
             'lat'     => (float) $r['lat'],
@@ -486,6 +539,43 @@ function kcj_astro_load_places($date) {
         );
     }
     return $out;
+}
+
+/**
+ * 具名数组 → 前端紧凑载荷行（16 项，与 assets/astro-place.js 的 F_* 常量一一对应）。
+ *
+ * ★ v2.3.10：从 templates/astro-today.php 抽出，成为**唯一构造点**。
+ *   原先只有模板在写这段，v2.3.10 的公开端点也要产出同结构行；
+ *   若两处各写一份，字段顺序或 null 处理一旦不一致，前端 apply() 会静默取错列。
+ *
+ * 顺序（改一处必须改两处，见 JS 常量）：
+ *   [key, cn, lat, lon, sunrise, sunset, daylen,
+ *    民用起, 民用止, 航海起, 航海止, 天文起, 天文止, 月出, 月落, 省码, 省名]
+ */
+function kcj_astro_place_to_row($key, $v) {
+    $key  = (string) $key;
+    $v    = is_array($v) ? $v : array();
+    $pmap = function_exists('kcj_astro_place_prov_map') ? kcj_astro_place_prov_map() : array();
+    $prow = isset($pmap[$key]) ? $pmap[$key] : array();
+    return array(
+        $key,
+        (string) (isset($v['cn']) ? $v['cn'] : $key),
+        isset($v['lat']) ? (float) $v['lat'] : null,
+        isset($v['lon']) ? (float) $v['lon'] : null,
+        isset($v['sunrise']) ? $v['sunrise'] : null,
+        isset($v['sunset']) ? $v['sunset'] : null,
+        isset($v['daylen']) ? $v['daylen'] : null,
+        isset($v['tw_c'][0]) ? $v['tw_c'][0] : null,
+        isset($v['tw_c'][1]) ? $v['tw_c'][1] : null,
+        isset($v['tw_n'][0]) ? $v['tw_n'][0] : null,
+        isset($v['tw_n'][1]) ? $v['tw_n'][1] : null,
+        isset($v['tw_a'][0]) ? $v['tw_a'][0] : null,
+        isset($v['tw_a'][1]) ? $v['tw_a'][1] : null,
+        isset($v['moonrise']) ? $v['moonrise'] : null,
+        isset($v['moonset']) ? $v['moonset'] : null,
+        isset($prow['p']) ? (string) $prow['p'] : '',
+        isset($prow['n']) ? (string) $prow['n'] : '',
+    );
 }
 
 /**

@@ -183,7 +183,7 @@ astro-forecast/
 
 ```bash
 python python/compute_sky.py --selftest        # 预期：通过 31 项
-python verify_package.py                       # 预期：通过 470 项
+python verify_package.py                       # 预期：通过 497 项
 python php_selftest.py                         # 预期：通过 48 项
 python python/build_dataset.py --selftest      # 预期：通过 51 项
 python python/event_almanac.py --selftest      # 预期：通过 228 项
@@ -207,7 +207,7 @@ KCJ_WP_USER=<用户名> KCJ_WP_APP_PASSWORD='<应用程序密码>' \
 
 校验器里每一条判据都配了**负控制** —— 一条被故意写坏、必须报红的样本。
 一条判据若是空壳（恒真），它给出的「全绿」只是心安，不是证据。
-本仓库现有负控制 **五十余条**，含若干条**变异测试**：把规则本身改坏，验证判据确实会红。
+本仓库现有负控制 **七十余条**，含若干条**变异测试**：把规则本身改坏，验证判据确实会红。
 
 ---
 

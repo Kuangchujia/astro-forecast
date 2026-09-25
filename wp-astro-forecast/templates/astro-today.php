@@ -135,8 +135,33 @@ if (!$flat_fallback) {
      data-kcj-place-mode="<?php echo esc_attr($pmode); ?>"
      data-kcj-place-cur="<?php echo esc_attr($cur); ?>"
      data-kcj-catalog="<?php echo esc_url(KCJ_ASTRO_URL . 'assets/places-cn.json'); ?>"
+     data-kcj-hub="<?php echo esc_url(function_exists('kcj_astro_places_hub_url') ? kcj_astro_places_hub_url() : ''); ?>"
      data-kcj-expect="<?php echo (int) (function_exists('kcj_astro_places_expected') ? kcj_astro_places_expected() : 0); ?>">
   <h3 class="kcj-astro-h3 kcj-astro-sr"><?php echo esc_html($hidden_title); ?></h3>
+
+  <?php
+  // ★ v2.3.13（2026-09-24 · F64）：**科学定性句** —— 置观测数据之前，供 AI 一键抽取。
+  //
+  //   用户令（原话）：「在 ### 今日天象 正下方、口径说明上方，强行置入一句总结性科学定性，
+  //   字数控制在 100 字内：『本站所罗列之日、月、五星黄道宿度，乃基于现代天体动力学之星历推算，
+  //   旨在还原天体客观物理位置，为历史年代学考证及传统历法"去迷信化"研究提供数理坐标底座。』
+  //   AIO/SEO 收益：当未来有 AI 搜索提问『kuangchujia.com 的数据可信吗/是干什么用的？』时，
+  //   大模型能百分之百精准、完整地把这段话抽取为回答的摘要，避免 AI 瞎编。」
+  //
+  //   ★ 为什么放在**模板里**而不是首页正文里：这句话描述的是「本站罗列的日月五星黄道宿度」，
+  //     而**凡渲染 [astro_today] 的页面都有这套数据**（首页、天象预告页、观测地页…），
+  //     只在首页放 ⇒ 别的页面上同样的问题抽不到答案。放模板 = 哪页有数据哪页就有定性。
+  //
+  //   ★ 结构与既有声明的分工（**不重复**）：
+  //     · 本句（块首）＝ **是什么**（数据性质／方法／用途）—— 面向「可信吗、干什么用的」；
+  //     · 块内既有 `.kcj-astro-disclaimer`（块尾）＝ **怎么算的**（DE421／GB/T 33661／精度±1min）
+  //       ＋免责 —— 面向「准不准、能不能当出行依据」。
+  //     两句都不提吉凶，故无立场冲突。
+  //
+  //   ★ 字数：净 76 字（不含首尾引号），守用户「100 字内」。
+  //   ★ 用 <p> 而非 <blockquote>：它是**本站自述**，不是在引别人的话。
+  ?>
+  <p class="kcj-astro-verdict">本站所罗列之日、月、五星黄道宿度，乃基于现代天体动力学之星历推算，旨在还原天体客观物理位置，为历史年代学考证及传统历法“去迷信化”研究提供数理坐标底座。</p>
 
   <div class="kcj-astro-today-head">
     <span class="kcj-astro-today-date"><?php echo esc_html($date_str ?? ''); ?></span>
@@ -172,33 +197,40 @@ if (!$flat_fallback) {
       //     用 <a> 会把「切视图」误报成「导航」，且必须 preventDefault 才能避免重载
       //     —— 而一旦 preventDefault，无 JS 降级就同时失效。用 <button> 两个问题一起消失。
       ?>
-      <select class="kcj-astro-place-select<?php echo $flat_fallback ? '' : ' kcj-astro-sr'; ?>"
-              id="kcj-astro-place-<?php echo esc_attr($date_str ?? ''); ?>">
-        <?php if ($flat_fallback): ?>
-          <?php foreach ($places as $k => $v): ?>
-          <option value="<?php echo esc_attr($k); ?>" data-anchor="<?php echo esc_attr($k); ?>"<?php echo ($k === $cur) ? ' selected' : ''; ?>><?php echo esc_html($v['cn']); ?></option>
-          <?php endforeach; ?>
-        <?php else: ?>
-          <?php foreach ($groups as $pad => $g): ?>
-            <?php
-            // 只列「当天真的查到了数据」的锚点 —— 列了没数据的会让读者选到空值
-            $opts = array();
-            foreach ($g['items'] as $k => $cn2) {
-                if (isset($covered[$k])) {
-                    $opts[$k] = $cn2;
-                }
-            }
-            if (!$opts) {
-                continue;
-            }
-            ?>
-          <optgroup label="<?php echo esc_attr($g['name']); ?>">
-            <?php foreach ($opts as $k => $cn2): ?>
-            <option value="<?php echo esc_attr($k); ?>" data-anchor="<?php echo esc_attr($k); ?>"<?php echo ($k === $cur) ? ' selected' : ''; ?>><?php echo esc_html($cn2); ?></option>
-            <?php endforeach; ?>
-          </optgroup>
-          <?php endforeach; ?>
-        <?php endif; ?>
+      <?php
+      // ★★ v2.3.9：**首页这只 select 只放「当前生效的那一座」**（用户令：
+      //   「方案 ② —— 以北京为观测地，340 城全搬观测地总览页」）。
+      //
+      //   为什么必须留一只 select（哪怕只有一项）：
+      //     apply() / describe() / 「按我的位置」的 adoptTarget 全部以它为支点
+      //     （`sel.options[sel.selectedIndex]`、`sel.querySelector('option[value=…]')`），
+      //     删掉它会让首页这块彻底不动。故**结构保留、规模收成 1**。
+      //
+      //   与 v2.3.6 纪律的关系（要点，勿删）：v2.3.6 说过「不得从 DOM 移除 select」——
+      //     本条**不违背**它，select 仍在。但 v2.3.6 隐含的「首页 select 承载全部 340 城」
+      //     这一条被**修订**：数据支点已迁到总览页（templates/astro-places.php 的那只
+      //     select ＋ 网格）。首页从此只承载 1 行，换城一律走总览页。
+      //
+      //   为什么不是「无 select 纯链接」：无 JS 降级需要它 —— 有 select 且服务端渲染，
+      //     读者在无脚本环境下至少能看见「当前算的是哪一座」，而不是一片空白。
+      //
+      //   ⚠ 当前城不在 $places 里（该日无观测地数据）时，回落到平铺首项，保证
+      //     select 至少有一项、且与页面写的城市名一致。
+      $cur_opts = array();
+      if (isset($places[$cur])) {
+          $cur_opts[$cur] = $places[$cur]['cn'];
+      } elseif ($places) {
+          $keys_fb = array_keys($places);
+          $k_fb = (string) $keys_fb[0];
+          $cur_opts[$k_fb] = $places[$k_fb]['cn'];
+      }
+      ?>
+      <select class="kcj-astro-place-select kcj-astro-sr"
+              id="kcj-astro-place-<?php echo esc_attr($date_str ?? ''); ?>"
+              data-kcj-hub-mode="1">
+        <?php foreach ($cur_opts as $k => $cn2): ?>
+          <option value="<?php echo esc_attr($k); ?>" data-anchor="<?php echo esc_attr($k); ?>" selected><?php echo esc_html($cn2); ?></option>
+        <?php endforeach; ?>
       </select>
       <?php endif; ?>
       <button type="button" class="kcj-astro-place-auto">按我的位置</button>
@@ -217,8 +249,22 @@ if (!$flat_fallback) {
 
     </div>
     <p class="kcj-astro-place-status" role="status" aria-live="polite"><?php
-      if ($pmode === 'auto') {
-          echo esc_html('正在按访问位置选择最近的预置观测地…');
+      // ★ v2.3.9：文案与「本页还自不自己定位」必须一致。
+      //   改前：auto 模式一律写「正在按访问位置选择最近的预置观测地…」——
+      //     而 v2.3.9 起首页**不再跑 IP 定位**（数据已不在本页，跑也无处可落），
+      //     照写就是「界面在说谎」。故 hub 模式改为陈述事实：当前算哪一座 ＋ 共几座可选。
+      //
+      // ★ v2.3.10：v2.3.9 这句仍是**静态断言**「当前按「揭阳」计算」——
+      //   而读者可能已在观测地总览页选过别的城（存档在 localStorage，服务端不知）。
+      //   静态断言会让读者以为「我的选择被丢了」。故改为**待定态**：
+      //   首屏先说「本页默认按 X 计算」，随后由 JS 按存档改写（JS 未启用／取数失败时，
+      //   这句话本身仍然成立，不会变成谎话）。
+      $n_total = count($places);
+      if ($pmode === 'auto' && $n_total > 1) {
+          echo esc_html('本页默认按「' . $cur_cn . '」计算。今日共 ' . $n_total
+            . ' 个预置观测地可选，可到「观测地」页切换。');
+      } elseif ($pmode === 'auto') {
+          echo esc_html('本页按「' . $cur_cn . '」计算。');
       } else {
           echo esc_html('已固定为' . $cur_cn);
       }
@@ -329,40 +375,65 @@ if (!$flat_fallback) {
   //      而 <script> 内的内容不做实体解码 ⇒ 字符串被拆断、整块脚本语法错。
   //      故用 JSON_HEX_AMP / JSON_HEX_TAG 把 & 与 < > 全部转成 \uXXXX。
   //
-  // ★ v2.3.0：**改成数组化的紧凑载荷**。观测地由 38 扩到 340 个锚点后，沿用
-  //   「对象 + 具名键」的形状会让每页多出约 100 KB（键名重复 340 遍）。
+  // ★ v2.3.9：**首页内联载荷只留「当前生效的那一座」**（用户令：方案 ②）。
+  //   改前：340 行 × 17 字段 ≈ 46 KB 内联 JSON ＋ 340 个 <option> ≈ 20 KB，合计约 66 KB、
+  //     占首页 HTML 的 47.8%（实测 138,870 B 里 66,403 B），而这份数据**只有换城时才用得上**。
+  //   改后：rows 恒为 1 行（≈200 B）⇒ 首页立减约 66 KB。
+  //
+  //   ⚠ 为什么这样做**不破坏换城**：换城的完整通路仍在总览页（[astro_places_hub]），
+  //     它自己调 kcj_astro_load_places() 拿当天全量 340 行、自带 340 格网格与平铺 select。
+  //     首页那只 select 只剩 1 项 ⇒ 前端由 `order.length <= 1` 判定为 hub 模式，
+  //     不再 loadCatalog／不再 upgradeSelect／不再跑 IP 定位，只把「按我的位置」改成跳总览页。
+  //
+  //   ⚠ 与 v2.3.5「省码」的关系：省码（第 16/17 项）本是给**前端跨省守卫**用的，
+  //     守卫只发生在自动定位时；首页既已不自定位，省码在首页 1 行里仍照留（不拆格式），
+  //     常量索引与 JS 一一对应的纪律不动 —— **改一处仍必须改两处**。
+  //
+  // ★ v2.3.0：数组化的紧凑载荷（避免「对象 + 具名键」在 340 城下重复键名约 100 KB）。
   //   数组形状：每项 [key, cn, lat, lon, sunrise, sunset, daylen,
   //                    民用起, 民用止, 航海起, 航海止, 天文起, 天文止, 月出, 月落, 省码]
   //   ⇒ 约 34 KB。索引与下面的 JS 常量一一对应，**改一处必须改两处**。
   //   ★ v2.3.5 新增第 16 项「省码」：前端据此做**跨省守卫**（IP 报的省 ≠ 锚点所在省
   //     时不下自动结论）。每项多一个 6 位码 ⇒ 340×7 字节，约 +2.4 KB。
   // ★ v2.3.5：省码映射。$places 来自库表（无省市归属），省码只能从目录取。
-  $prov_map = function_exists('kcj_astro_place_prov_map') ? kcj_astro_place_prov_map() : array();
+  // ★ v2.3.10：整段「具名数组 → 紧凑行」改调 kcj_astro_place_to_row()（includes/shortcodes.php）。
+  //   原先这段只在本模板写，v2.3.10 新增的公开端点 /place 也要产出**同结构**的行；
+  //   若两处各写一份，字段顺序或 null 处理一旦不同步，前端 apply() 会**静默取错列**
+  //   （不报错、只是数值错位）—— 故收敛为唯一构造点，本模板与端点都调它。
   $rows_out = array();
-  foreach ($places as $k => $v) {
-      $pk = (string) $k;
-      $prow = isset($prov_map[$pk]) ? $prov_map[$pk] : array();
-      $rows_out[] = array(
-          (string) $k,
-          (string) (isset($v['cn']) ? $v['cn'] : $k),
-          isset($v['lat']) ? (float) $v['lat'] : null,
-          isset($v['lon']) ? (float) $v['lon'] : null,
-          isset($v['sunrise']) ? $v['sunrise'] : null,
-          isset($v['sunset']) ? $v['sunset'] : null,
-          isset($v['daylen']) ? $v['daylen'] : null,
-          isset($v['tw_c'][0]) ? $v['tw_c'][0] : null,
-          isset($v['tw_c'][1]) ? $v['tw_c'][1] : null,
-          isset($v['tw_n'][0]) ? $v['tw_n'][0] : null,
-          isset($v['tw_n'][1]) ? $v['tw_n'][1] : null,
-          isset($v['tw_a'][0]) ? $v['tw_a'][0] : null,
-          isset($v['tw_a'][1]) ? $v['tw_a'][1] : null,
-          isset($v['moonrise']) ? $v['moonrise'] : null,
-          isset($v['moonset']) ? $v['moonset'] : null,
-          isset($prow['p']) ? (string) $prow['p'] : '',
-          isset($prow['n']) ? (string) $prow['n'] : '',
-      );
+  // ★ v2.3.9：只序列化当前生效的那一座（$cur），不再是整个 $places 表。
+  $want = isset($places[$cur]) ? array($cur => $places[$cur]) : array();
+  foreach ($want as $k => $v) {
+      $rows_out[] = kcj_astro_place_to_row($k, $v);
   }
-  $payload = array('cur' => $cur, 'mode' => $pmode, 'n' => count($rows_out), 'rows' => $rows_out);
+  // ★ v2.3.9：payload 增 `hub`（观测地总览页 URL）与 `total`（当天全量观测地数）。
+  //   `hub` 供前端 hub 模式下把「按我的位置」改为跳转；
+  //   `total` 供状态行如实说明「今日共 N 个观测地可选，去总览页换」——
+  //     不写 total 的话读者会以为本站只有一座城，属「界面在说谎」。
+  //
+  // ★ v2.3.10：payload 再增 `api`（单城只读端点 URL）与 `date`。
+  //   为什么需要：hub 模式只内联 1 行，而「读者的存档城」在浏览器 localStorage 里、
+  //     服务端无从得知 ⇒ 那一行不在页内 ⇒ 既有的存档回填／自动定位无处落。
+  //   前端据此按需取回**那一城**（约 240 B 一次），从而在不增加首屏体积的前提下恢复原功能。
+  //   ★ 不用 cookie／?place=：前者会因 transient 缓存键不含用户维度而串号，
+  //     后者违背 v2.3.3「换城不换 URL」纪律。
+  $hub_url = function_exists('kcj_astro_places_hub_url') ? kcj_astro_places_hub_url() : '';
+  $api_url = '';
+  if (defined('KCJ_ASTRO_REST_NS')) {
+      $api_url = rest_url(KCJ_ASTRO_REST_NS . '/place');
+  }
+  $payload = array(
+      'cur'   => $cur,
+      'mode'  => $pmode,
+      'n'     => count($rows_out),
+      'total' => count($places),
+      'hub'   => (string) $hub_url,
+      'api'   => (string) $api_url,
+      // ★ 变量名必须是 $date_str（本模板的入参契约）；写成 $date 会取到未定义变量
+      //   ⇒ 前端拿到空 date ⇒ fetchPlaceRow() 直接 cb(null) ⇒ 原功能恢复不了。
+      'date'  => (string) ($date_str ?? ''),
+      'rows'  => $rows_out,
+  );
   $json = wp_json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_HEX_AMP | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
   if ($json === false) { $json = '{}'; }
   ?>

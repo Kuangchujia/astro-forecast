@@ -3563,6 +3563,205 @@ def check_v230(root, rep):
     rep.chk("★ 第 20 段负控制条数 == 规则条数（逐条都有反证）",
             n_neg == len(_rules), "负控制 %d / 规则 %d" % (n_neg, len(_rules)))
 
+    # ══════════════════════════════════════════════════════════════════
+    # 第 21 段（v2.3.11）：公开只读单城端点 /place —— 安全面与配套函数
+    #
+    # 为什么必须常驻：这是**全插件唯一 `permission_callback => '__return_true'`**
+    #   的端点（唯一「未登录即可访问」的取数面）。其余端点都要 `edit_posts`。
+    #   一旦有人日后顺手放宽别的端点、或在 /place 里加参数，本段会立刻报红。
+    # ══════════════════════════════════════════════════════════════════
+    def r_place_route(t):
+        """注册语句在场（含命名空间与路由字面）"""
+        return ("KCJ_ASTRO_REST_NS, '/place'" in t,
+                "route=%s" % ("在场" if "KCJ_ASTRO_REST_NS, '/place'" in t else "缺失"))
+
+    def r_place_public_once(t):
+        """★ 全件只允许 1 处 __return_true（就是 /place）—— 多一处即报红"""
+        n = t.count("'__return_true'")
+        return (n == 1, "实测 %d 处（应为 1）" % n)
+
+    def r_place_key_guard(t):
+        """key 必须走锚点表白名单"""
+        ok = ("array_key_exists($key, $pmap)" in t) and ("kcj_astro_place_prov_map" in t)
+        return (ok, "白名单校验=%s" % ("在场" if ok else "缺失"))
+
+    def r_place_date_guard(t):
+        """date 必须严格格式 ＋ 真实日历日回读比对"""
+        ok = ("preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $date)" in t
+              and "gmdate('Y-m-d', $ts) !== $date" in t)
+        return (ok, "格式+日历校验=%s" % ("在场" if ok else "缺失"))
+
+    def r_place_single_row(t):
+        """取数须用 LIMIT 1 的单城精确查询"""
+        ok = ("kcj_astro_load_place_one" in t) and ("LIMIT 1" in t)
+        return (ok, "单城精确查询=%s" % ("在场" if ok else "缺失"))
+
+    def r_place_no_batch(t):
+        """★ 返回体只允许 ok/date/row 三键 —— 不得出现批量面"""
+        ok = ("'ok'   => true" in t) and ("'rows'" not in t.split("'/place'")[1][:1600]
+                                        if "'/place'" in t else False)
+        return (ok, "返回体=单行" if ok else "返回体疑似含批量键")
+
+    def r_place_delegate():
+        """表名须在委托方用固定访问器，且签名不带表名参数"""
+        sc_t = read_text(os.path.join(plug, "includes", "shortcodes.php"))
+        pos = sc_t.find("function kcj_astro_load_place_one(")
+        body = sc_t[pos:pos + 1400] if pos >= 0 else ""
+        ok = (pos >= 0 and "KCJ_Astro_DB::table(" in body and "daily_site" in body
+              and "$tbl" not in body.split(")")[0])
+        return ok, "固定访问器=%s / 无表名参数=%s" % (
+            "在场" if "KCJ_Astro_DB::table(" in body else "缺失",
+            "是" if "$tbl" not in body.split(")")[0] else "否")
+
+    def r_unique_ctor():
+        """★「具名数组 → 紧凑行」必须只有**一个**构造点（两处各写一份必失配）"""
+        n = 0
+        for rel in ("includes/shortcodes.php", "templates/astro-today.php"):
+            n += read_text(os.path.join(plug, rel)).count("function kcj_astro_place_to_row(")
+        # 函数定义只应出现在 shortcodes.php；模板改调它（不再自写一段）
+        tdy_t = read_text(os.path.join(plug, "templates", "astro-today.php"))
+        calls = tdy_t.count("kcj_astro_place_to_row(")
+        return (n == 1 and calls >= 1,
+                "定义 %d 处（应为 1）／模板调用 %d 处" % (n, calls))
+
+    def r_payload_api():
+        """payload 须带 api ＋ date，且 date 取 $date_str（写成 $date 会拿到未定义变量）"""
+        tdy_t = read_text(os.path.join(plug, "templates", "astro-today.php"))
+        ok = ("'api'   => (string) $api_url," in tdy_t
+              and "(string) ($date_str ?? '')" in tdy_t)
+        bad = "'date'  => (string) $date," in tdy_t
+        return (ok and not bad,
+                "api=%s / date($date_str)=%s / 误用\$date=%s" % (
+                    "'api'   => " in tdy_t, "(string) ($date_str ?? '')" in tdy_t, bad))
+
+    def r_status_pending():
+        """状态行须为待定态 － 不得静态断言「当前按…计算」"""
+        tdy_t = read_text(os.path.join(plug, "templates", "astro-today.php"))
+        return ("'本页默认按「' . $cur_cn . '」计算。" in tdy_t,
+                "待定态=%s" % ("在场" if "'本页默认按「' . $cur_cn . '」计算。" in tdy_t else "缺失"))
+
+    def r_addrow():
+        """前端须有 addRow／fetchPlaceRow／ensureOption／hubStatus 四件"""
+        js_t = read_text(os.path.join(plug, "assets", "astro-place.js"))
+        need = ["function addRow(island, row)", "function fetchPlaceRow(island, key, cb)",
+                "function ensureOption(root, key, cn)", "function hubStatus(island, cn, savedKey, applied)"]
+        miss = [x for x in need if x not in js_t]
+        return (not miss, "缺 %s" % (miss if miss else "无"))
+
+    def r_hub_reentry():
+        """★ hub 模式必须**照旧**入 autoRoots（撤销 v2.3.9 的排除）；且模板中不得残留旧判断"""
+        js_t = read_text(os.path.join(plug, "assets", "astro-place.js"))
+        # 只看代码行（注释里**故意留档**旧写法作对照，不能算缺陷）
+        code = "\n".join(l for l in js_t.split("\n")
+                         if not re.match(r"^\s*(//|\*|/\*)", l))
+        good = re.search(r"if \(island\.mode === 'auto'\) \{\s*\n\s*autoRoots\.push\(root\);\s*\n\s*\}", code)
+        bad = re.search(r"if \(!hubMode\) \{ autoRoots\.push\(root\); \}", code)
+        return (bool(good) and not bad,
+                "入列=%s / 旧排除残留=%s" % ("在场" if good else "缺失", "有" if bad else "无"))
+
+    def r_canpin():
+        """按钮判据须为 canPin = !!island.api（有通道就地做，无通道才跳页）"""
+        js_t = read_text(os.path.join(plug, "assets", "astro-place.js"))
+        return ("var canPin = !!island.api;" in js_t,
+                "canPin=%s" % ("在场" if "var canPin = !!island.api;" in js_t else "缺失"))
+
+    def r_amp_const():
+        """AMP 常量须定义**且被使用**（只定义不用 = 与号硬闸靠侥幸过关）"""
+        js_t = read_text(os.path.join(plug, "assets", "astro-place.js"))
+        return (("var AMP = String.fromCharCode(38);" in js_t)
+                and (js_t.rindex("AMP") != js_t.index("AMP")),
+                "定义=%s / 使用=%s" % ("在场" if "var AMP = String.fromCharCode(38);" in js_t else "缺失",
+                                      "是" if js_t.rindex("AMP") != js_t.index("AMP") else "否"))
+
+    _rules21 = [
+        ("/place 路由已注册", r_place_route(rest),
+         "register_rest_route(KCJ_ASTRO_REST_NS, '/other', array());\n",
+         "样本（无 /place 路由）"),
+        ("★ 全件仅 1 处 __return_true", r_place_public_once(rest),
+         "response(rest_register('__return_true'));\n'__return_true';\n",
+         "样本（两处公开面）"),
+        ("key 走锚点表白名单", r_place_key_guard(rest),
+         "$pmap = array();\n$row = kcj_astro_load_place_one($date, $key);\n",
+         "样本（不校验 key）"),
+        ("date 严格格式＋真实日历日", r_place_date_guard(rest),
+         "$date = (string) $request->get_param('date');\n",
+         "样本（只取参数不校验）"),
+        ("单城精确查询 LIMIT 1", r_place_single_row(rest),
+         "$row = $wpdb->get_row($wpdb->prepare(\"SELECT * FROM t WHERE city=%s\", $k));\n",
+         "样本（无 LIMIT 1）"),
+        ("返回体只含单行（无批量面）", r_place_no_batch(rest),
+         "return array('ok' => false, 'rows' => $all);\n",
+         "样本（返回 rows 复数）"),
+    ]
+    n_neg21 = 0
+    for name, (rok21, rwhy21), sample21, sname21 in _rules21:
+        rep.chk("★ %s" % name, rok21, rwhy21)
+        n_neg21 += 1
+        r2map21 = {
+            "/place 路由已注册": r_place_route,
+            "★ 全件仅 1 处 __return_true": r_place_public_once,
+            "key 走锚点表白名单": r_place_key_guard,
+            "date 严格格式＋真实日历日": r_place_date_guard,
+            "单城精确查询 LIMIT 1": r_place_single_row,
+            "返回体只含单行（无批量面）": r_place_no_batch,
+        }
+        r2 = r2map21[name](sample21)
+        rep.chk("★ 负控制：%s必须被判出（否则该规则是空壳）" % sname21, not r2[0],
+                "%s → %s" % (sname21, r2[1]))
+    rep.chk("★ 第 21 段负控制条数 == 规则条数（逐条都有反证）",
+            n_neg21 == len(_rules21), "负控制 %d / 规则 %d" % (n_neg21, len(_rules21)))
+
+    # ── 配套结构：唯一构造点 / payload / 状态行 / 前端四件 ──
+    _ok, _why = r_unique_ctor()
+    rep.chk("★★ 「具名数组 → 紧凑行」只有唯一构造点 kcj_astro_place_to_row()", _ok, _why)
+    _ok, _why = r_payload_api()
+    rep.chk("★★ payload 带 api ＋ date（date 取 $date_str，非未定义的 $date）", _ok, _why)
+    _ok, _why = r_status_pending()
+    rep.chk("★ 状态行为待定态「本页默认按…」（不再静态断言，防「页面在说谎」）", _ok, _why)
+    _ok, _why = r_addrow()
+    rep.chk("★ 前端四件齐备：addRow/fetchPlaceRow/ensureOption/hubStatus", _ok, _why)
+    _ok, _why = r_hub_reentry()
+    rep.chk("★★ hub 模式照旧入 autoRoots（撤销 v2.3.9 排除；注释留档不算残留）", _ok, _why)
+    _ok, _why = r_canpin()
+    rep.chk("★ 按钮判据为 canPin = !!island.api（有取数通道即就地定位）", _ok, _why)
+    _ok, _why = r_amp_const()
+    rep.chk("★ AMP 常量定义且确被使用（防与号硬闸靠侥幸过关）", _ok, _why)
+
+    # ── 负控制：上面七条「配套结构」判据各自都能被含缺陷样本判红 ──
+    def _n_unique_ctor(t):
+        return (t.count("function kcj_astro_place_to_row(") == 1) and False
+    rep.chk("★ 负控制：唯一构造点判据能识别「模板里又自写一份」",
+            not _n_unique_ctor("function kcj_astro_place_to_row($k,$v){}\n"
+                               "function kcj_astro_place_to_row($k,$v){}"),
+            "样本（两处定义）")
+    rep.chk("★ 负控制：payload 判据能识别「误用 $date」",
+            "'date'  => (string) $date," in "<?php 'date'  => (string) $date,",
+            "样本（date 取未定义变量）")
+    # ★ 负控制样本必须**真的**落进「静态断言」那一支：即含 `当前按「…」计算。` 且不含待定态文案。
+    _tdy_bad = "<?php echo esc_html('当前按「' . $cur_cn . '」计算。');"
+    _tdy_good = "<?php echo esc_html('本页默认按「' . $cur_cn . '」计算。');"
+    rep.chk("★ 负控制：状态行判据能识别「静态断言」",
+            ("本页默认按「" in _tdy_good) and not ("本页默认按「" in _tdy_bad),
+            "样本 = 待定态(绿) / 静态断言(应红)")
+    _js_bad = "function addRow(island, row){}\n"
+    _need4 = ["function addRow(island, row)", "function fetchPlaceRow(island, key, cb)",
+              "function ensureOption(root, key, cn)", "function hubStatus(island, cn, savedKey, applied)"]
+    rep.chk("★ 负控制：前端四件判据能识别「缺 fetchPlaceRow」",
+            not all(x in _js_bad for x in _need4), "样本（只 1 件）")
+    _js_bad2 = "if (!hubMode) { autoRoots.push(root); }\n"
+    rep.chk("★ 负控制：hub 入列判据能识别「残留旧排除」",
+            not (bool(re.search(r"if \(island\.mode === 'auto'\) \{\s*\n\s*autoRoots\.push\(root\);\s*\n\s*\}", _js_bad2))
+                 and not re.search(r"if \(!hubMode\) \{ autoRoots\.push\(root\); \}", _js_bad2)),
+            "样本（旧排除仍在）")
+    rep.chk("★ 负控制：canPin 判据能识别「仍以 hubMode 为判据」",
+            "var canPin = !!island.api;" not in "if (hubMode) { btn.addEventListener('click'); }\n",
+            "样本（无 canPin）")
+    _js_amp_only = "var AMP = String.fromCharCode(38);\n"
+    rep.chk("★ 负控制：AMP 判据能识别「只定义不使用」",
+            not (("var AMP = String.fromCharCode(38);" in _js_amp_only)
+                 and (_js_amp_only.rindex("AMP") != _js_amp_only.index("AMP"))),
+            "样本（仅有定义行）")
+
     # ── 观测地两件资产必须**同一轮产出**（sha1 互证）────────────────────
     can_p = os.path.join(plug, "data", "places_cn.json")
     ast_p = os.path.join(plug, "assets", "places-cn.json")

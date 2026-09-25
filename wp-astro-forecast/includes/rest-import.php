@@ -4,7 +4,7 @@
  *
  * ── 为什么必须走 REST ────────────────────────────────────────────────
  *   WordPress.com 托管**不开放外部 MySQL 直连**，故 Python 侧的 `--db`（pymysql 直连）
- *   在 WordPress.com 托管环境下不可用。可行路径只有两条：
+ *   在 kuangchujia.com 上不可用。可行路径只有两条：
  *     ① 后台手工上传 SQL/CSV（不适合每日增量）
  *     ② 插件暴露鉴权 REST 端点，Python 用「应用程序密码」推数据 ← 本文件
  *
@@ -536,6 +536,173 @@ add_action('rest_api_init', function () {
         'callback'            => function () {
             kcj_astro_forecast_flush_cache();
             return array('ok' => true, 'flushed' => true);
+        },
+    ));
+
+    /**
+     * 公开只读：取某日**单个锚点**的观测地行（v2.3.10 新增）。
+     *
+     * 为什么需要它：首页瘦身后只内联 1 座城（v2.3.9），而读者的**存档城**在浏览器
+     *   localStorage 里 —— 服务端无从得知。于是「读者在观测地总览页选过城，回首页
+     *   应按该城显示」这条既有功能断了（首页 island 里没有那一城的数据行）。
+     *   本端点给前端一个**按需只取那一城**的通道，从而在不增加首屏体积的前提下恢复原功能。
+     *
+     * 为什么不是 cookie／?place=：① 页面 transient 缓存键不含用户维度，读 cookie 会串号；
+     *   ② v2.3.3 明令「换城不换 URL」（防居住地被留在地址栏被收藏转发）。
+     *   REST 查询不落在 URL 语义里，存档仍只在 localStorage。
+     *
+     * ★ 安全面（这是全插件唯一 `__return_true` 的端点，务必守住）：
+     *   - **只读**，且**只读 daily_site 一张白名单表**；不接受表名参数；
+     *   - `key` 必须**存在于锚点表**（kcj_astro_place_prov_map() 的键集）⇒ 不接受任意 city 串；
+     *   - `date` 必须严格 `YYYY-MM-DD`，且经 `wp_date` 走一遍日历合法性（拒绝 2026-02-30）；
+     *   - 返回体**只含与 island 行同结构的数组**，不含其它任何库表内容；
+     *   - 单次只返回 1 行，无批量面 ⇒ 不可被用来拖全库。
+     */
+    register_rest_route(KCJ_ASTRO_REST_NS, '/place', array(
+        'methods'             => 'GET',
+        'permission_callback' => '__return_true',
+        'args'                => array(
+            'date' => array(
+                'required'          => true,
+                'sanitize_callback' => 'sanitize_text_field',
+            ),
+            'key'  => array(
+                'required'          => true,
+                'sanitize_callback' => 'sanitize_text_field',
+            ),
+        ),
+        'callback'            => function ($request) {
+            $date = (string) $request->get_param('date');
+            $key  = (string) $request->get_param('key');
+
+            // ① 日期白名单：严格格式 + 真实日历日
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                return new WP_Error('kcj_astro_bad_date', 'date 须为 YYYY-MM-DD', array('status' => 400));
+            }
+            $ts = strtotime($date . ' 00:00:00 UTC');
+            if ($ts === false || gmdate('Y-m-d', $ts) !== $date) {
+                return new WP_Error('kcj_astro_bad_date', 'date 不是合法日历日', array('status' => 400));
+            }
+
+            // ② 锚点白名单：key 必须在目录的锚点表里（不从库表直接取任意 city）
+            $pmap = function_exists('kcj_astro_place_prov_map') ? kcj_astro_place_prov_map() : array();
+            if (!is_array($pmap) || $key === '' || !array_key_exists($key, $pmap)) {
+                return new WP_Error('kcj_astro_bad_key', 'key 不在预置观测地清单内', array('status' => 404));
+            }
+
+            // ③ 取数（单城精确查询，不扫全表）
+            $row = kcj_astro_load_place_one($date, $key);
+            if ($row === null) {
+                return new WP_Error('kcj_astro_no_row',
+                    '该日该观测地无数据（可能尚未导入）', array('status' => 404));
+            }
+
+            // ④ 产出与 island 单行同结构的载荷（复用唯一构造点，防两处失配）
+            return array(
+                'ok'   => true,
+                'date' => $date,
+                'row'  => kcj_astro_place_to_row($key, $row),
+            );
+        },
+    ));
+
+    /**
+     * 导航菜单位置：读取与修复（v2.3.16 新增 · 一次性运维端点）。
+     *
+     * 背景：2026-09-25 全站导航栏消失。定谳＝Seedlet 主题以 `has_nav_menu('primary')`
+     *   为唯一开关决定是否渲染 `<nav>`；该开关为 false ⇒ 导航整块不输出。
+     *   站上菜单 `Primary`（id 1359）**11 项完好**，丢的是「挂到哪个位置」这条分配记录。
+     *   WP.com 的 `/wp/v2/.../menus` 端点在本站**不接受任何位置名**（一律 400
+     *   `rest_invalid_menu_location`），`/menu-locations` 在 Jetpack 站点**未实现**（404）
+     *   ⇒ 无法经通用 REST 修复，故由本插件（我方自建、可控）提供端点。
+     *
+     * 为什么先 dry_run：Polylang 激活后会把裸位置 `primary` 换成语言化位置
+     *   （形如 `primary_zh`／`primary_en`），**具体名字只能由服务器上的
+     *   `get_registered_nav_menus()` 读出**——客户端探名会盲扫且污染日志。
+     *   故先 `dry_run=1` 报告真实位置与当前分配，确认后再执行。
+     *
+     * 安全面：`manage_options`（比 import 端点的 `edit_posts` 更严）；
+     *   **只做「把既有菜单挂到既有位置」**，不新建/删除菜单、不改菜单项内容。
+     */
+    register_rest_route(KCJ_ASTRO_REST_NS, '/nav-menu-locations', array(
+        'methods'             => 'GET',
+        'permission_callback' => function () { return current_user_can('manage_options'); },
+        'callback'            => function () {
+            $locs = get_registered_nav_menus();          // 位置 slug => 人类可读名
+            $cur  = get_nav_menu_locations();            // 位置 slug => menu term_id
+            $menus = array();
+            foreach (wp_get_nav_menus() as $m) {
+                $menus[] = array(
+                    'term_id' => (int) $m->term_id,
+                    'name'    => $m->name,
+                    'slug'    => $m->slug,
+                    'count'   => (int) $m->count,
+                );
+            }
+            $pll = array(
+                'polylang_active' => function_exists('pll_languages_list'),
+                'languages'       => function_exists('pll_languages_list') ? pll_languages_list() : array(),
+                'default'         => function_exists('pll_default_language') ? pll_default_language() : null,
+                'current'         => function_exists('pll_current_language') ? pll_current_language() : null,
+            );
+            return array(
+                'ok'                => true,
+                'theme'             => wp_get_theme()->get('Name') . ' ' . wp_get_theme()->get('Version'),
+                'registered'        => $locs,
+                'current_locations' => $cur,
+                'menus'             => $menus,
+                'polylang'          => $pll,
+                'has_primary'       => has_nav_menu('primary'),
+                'has_primary_pll'   => function_exists('pll_current_language')
+                                        ? has_nav_menu('primary_' . pll_current_language()) : null,
+            );
+        },
+    ));
+
+    register_rest_route(KCJ_ASTRO_REST_NS, '/nav-menu-locations', array(
+        'methods'             => 'POST',
+        'permission_callback' => function () { return current_user_can('manage_options'); },
+        'callback'            => function ($request) {
+            $menu_id = (int) $request->get_param('menu_id');
+            $targets = $request->get_param('locations');   // 数组：位置 slug 列表
+            if ($menu_id <= 0 || !is_array($targets) || !$targets) {
+                return new WP_Error('kcj_astro_bad_request',
+                    '需要 JSON: {"menu_id":1359,"locations":["primary", ...]}',
+                    array('status' => 400));
+            }
+            $valid = array_keys(get_registered_nav_menus());
+            $cur   = get_nav_menu_locations();
+            $applied = array();
+            $skipped = array();
+            foreach ($targets as $loc) {
+                $loc = sanitize_key((string) $loc);
+                if (!in_array($loc, $valid, true)) {
+                    $skipped[] = $loc . '（不在已注册位置内）';
+                    continue;
+                }
+                $cur[$loc] = $menu_id;
+                $applied[] = $loc;
+            }
+            if (!$applied) {
+                return new WP_Error('kcj_astro_no_valid_location',
+                    '给定位置全部无效。已注册位置：' . implode(', ', $valid),
+                    array('status' => 400));
+            }
+            set_theme_mod('nav_menu_locations', $cur);
+            // 复核：只信回读
+            $after = get_nav_menu_locations();
+            $check = array();
+            foreach ($applied as $loc) {
+                $check[$loc] = isset($after[$loc]) ? (int) $after[$loc] : null;
+            }
+            return array(
+                'ok'        => true,
+                'applied'   => $applied,
+                'skipped'   => $skipped,
+                'verify'    => $check,
+                'has_primary' => has_nav_menu('primary'),
+                'note'      => '已写 theme_mod nav_menu_locations；清一次对象缓存后前台即生效',
+            );
         },
     ));
 

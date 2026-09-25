@@ -101,6 +101,10 @@
 
   var EPS_KM = 111.2;   // 平面近似：纬度方向每度约 111.2 km（与 Python 侧 nearest_city 同一常数）
 
+  // ★ 本文件属「前端脚本零与号」硬闸范围：整个文件不得出现字符「与号（字符码 38）」。
+  //   查询串的连接符用这个常量拼，既免去字面与号，也不依赖 HTML 实体解析。
+  var AMP = String.fromCharCode(38);
+
   // 紧凑载荷的列序（与 templates/astro-today.php 的 $rows_out 一一对应）
   var F_KEY = 0, F_CN = 1, F_LAT = 2, F_LON = 3;
   var F_SUNRISE = 4, F_SUNSET = 5, F_DAYLEN = 6;
@@ -156,7 +160,81 @@
       order.push(k);
     }
     if (!order.length) { return null; }
-    return { cur: data.cur || '', mode: data.mode || 'off', index: index, order: order };
+    /* ★ v2.3.9：hub 模式 —— 首页载荷只剩「当前生效的那一座」。
+     *   判据用 `order.length <= 1`（结构判据），不依赖任何新字段是否被平台后处理保留；
+     *   `data.hub` / `data.total` 只作附加信息，缺了也不影响模式判定。
+     *   ⇒ 一旦成立：本页不升级下拉、不跑定位，换城一律回总览页。 */
+    var hub = (typeof data.hub === 'string') ? data.hub : '';
+    var total = (typeof data.total === 'number') ? data.total : 0;
+    var isHub = (order.length <= 1);
+    /* ★ v2.3.10：hub 模式不再是「功能停摆」的判据。
+     *   v2.3.9 曾用 isHub 把本页的「存档回填」与「自动定位」一并关掉，
+     *   结果是**读者在总览页选过的城，回首页不再生效**（首页只有 1 行，apply() 无处落）。
+     *   现在改为：hub 模式下这两件事**照旧要做**，缺的那一行数据由 fetchPlaceRow() 按需补：
+     *     - 存档城 ≠ 本页城 ⇒ 取存档城那一行 ⇒ addRow() 并入 index ⇒ 走既有 apply() 通路；
+     *     - 无存档时自动定位 ⇒ 同上，取定位到的那一城那一行。
+     *   ⇒ 首屏体积不变（仍只内联 1 行），但原功能恢复。 */
+    var api = (typeof data.api === 'string') ? data.api : '';
+    var date = (typeof data.date === 'string') ? data.date : '';
+    return { cur: data.cur || '', mode: data.mode || 'off', index: index, order: order,
+             hub: hub, total: total, isHub: isHub, api: api, date: date };
+  }
+
+  /**
+   * 把一行数据并入 island 的 index/order（v2.3.10）。
+   *
+   * 为什么要它：hub 模式下首屏只内联 1 行，而 apply() 依赖 `island.index[key]`。
+   *   按需取回某城后必须**并进同一份 index**，才能让既有 apply()/describe()/syncGrid()
+   *   毫无改动地工作 —— 这正是「零新代码路径」原则（v2.3.6）的延续。
+   * 幂等：同一 key 重复并入只覆盖值，不重复入 order。
+   */
+  function addRow(island, row) {
+    if (!island || !row) { return false; }
+    var k = row[F_KEY];
+    if (!k) { return false; }
+    if (!island.index[k]) { island.order.push(k); }
+    island.index[k] = row;
+    return true;
+  }
+
+  /**
+   * 按需取「某日某锚点」的观测地行（v2.3.10）。
+   *
+   * 为什么走 REST 而不用 cookie／?place=：
+   *   ① 本项目页面走 transient 缓存且**键不含用户维度** ⇒ 服务端读 cookie 会串号（A 的城发给 B）；
+   *   ② v2.3.3 既定纪律「换城不换 URL」—— 走 ?place= 会把观测地永久留在地址栏被收藏转发。
+   *   REST 查询不落在 URL 语义里，读者的选择仍只存在 localStorage。
+   *
+   * 失败一律静默回落（不弹错、不卡住）：回调 cb(null)，由调用方保持现状。
+   */
+  function fetchPlaceRow(island, key, cb) {
+    /* ★ 本文件属「前端脚本零与号」硬闸范围：一律不用逻辑与／位与运算符，
+       连接符也不写字面与号（用 AMP 常量，字符码 38）。 */
+    var base = (island ? (island.api ? island.api : '') : '');
+    var date = (island ? (island.date ? island.date : '') : '');
+    if (!base || !date || !key) { cb(null); return; }
+    var url = base
+      + (base.indexOf('?') >= 0 ? AMP : '?')
+      + 'date=' + encodeURIComponent(date)
+      + AMP + 'key=' + encodeURIComponent(key);
+    var done = false;
+    function finish(row) { if (done) { return; } done = true; cb(row); }
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', url, true);
+      xhr.timeout = 8000;
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) { return; }
+        if (xhr.status < 200 || xhr.status >= 300) { finish(null); return; }
+        var out = null;
+        try { out = JSON.parse(xhr.responseText); } catch (e) { out = null; }
+        if (!out || !out.row || !out.row[F_KEY]) { finish(null); return; }
+        finish(out.row);
+      };
+      xhr.ontimeout = function () { finish(null); };
+      xhr.onerror = function () { finish(null); };
+      xhr.send();
+    } catch (e) { finish(null); }
   }
 
   /** 平面近似距离（km）。只用于「选最近的一个预置观测地」，与对外数值无关。 */
@@ -702,8 +780,21 @@
       var manual = false;
       var sel = root.querySelector('.kcj-astro-place-select');
       var catUrl = root.getAttribute('data-kcj-catalog') || '';
+      /* ★ v2.3.9：hub 模式 = 首页载荷只剩 1 座城（见 parseIsland）。
+       *   此时本页**不做**三件事，理由是「数据不在本页，做了也无处落」：
+       *     ① 不 loadCatalog（那只目录 120 KB，专为升级成省市县三级下拉，本页已不需要）；
+       *     ② 不 upgradeSelect（同上）；
+       *     ③ 不跑 IP 定位（换城要换整页数据，定位结果在本页无法生效）。
+       *   「按我的位置」改为**跳总览页**：由总览页自己去定位/让读者选。
+       *   ⚠ 总览页（.kcj-astro-places-hub）走的仍是 initHub()，340 城全量保留，不受此分支影响。 */
+      var hubMode = !!island.isHub;
+      var hubUrl = island.hub || root.getAttribute('data-kcj-hub') || '';
 
+      /* ★ 写法纪律：本项目禁用裸与号（含双与号）—— 校验闸「前端脚本零与号」是硬闸。
+       *   理由：本件虽是外置资源，但同一套源码会被内联进正文的路径复用，
+       *   而平台后处理会把裸与号换成实体、拆断脚本。故一律用 `!()` 与三元 替代。 */
       if (sel) {
+       if (!hubMode) {
         sel.addEventListener('change', function () {
           manual = true;
           var opt = sel.options[sel.selectedIndex];
@@ -733,64 +824,218 @@
           }
           setStatus(root, describe(root, island, sel));
         });
+       }
       }
 
       var btn = root.querySelector('.kcj-astro-place-auto');
       if (btn) {
-        btn.addEventListener('click', function () {
-          manual = false;
-          setStatus(root, '正在按访问位置选择最近的预置观测地…');
-          // ★ v2.3.5：跨省时的「仍改用 X」按钮动作 = 套用 ＋ 回写下拉与网格。
-          //   与态三走的是同一条落点，只是在读者确认后才执行。
-          function adoptTarget(key) {
-            if (!apply(root, island, key)) { return; }
-            manual = true;
-            if (sel) {
-              if (sel.querySelector('option[value="' + key + '"]')) { sel.value = key; }
-            }
-            syncGrid(root, island, key);
-            setStatus(root, '已改用「' + island.index[key][F_CN] + '」。');
-          }
-          locate(function (hit) {
-            if (!hit) {
-              setStatus(root, '定位失败（接口不可达或被浏览器拦截），已保持当前观测地。');
-              return;
-            }
-            // ★ v2.3.5：manual 只在**真的改了城**时才置位 ——
-            //   否则一次「仅提示」的点击会把后续自动定位永久挡掉（读者只是想知道自己在哪）。
-            var res = autoApply(root, island, sel, hit, '。',
-              function () { adoptTarget(res.key); });
+        // ★ v2.3.9 曾把 hub 模式下的「按我的位置」改成**跳总览页**（理由是数据不在本页）。
+        //   ★ v2.3.10 撤销该改法：数据虽不在本页，但可**按需取**（fetchPlaceRow）⇒
+        //     恢复原功能：就地定位 + 就地换城，读者不必离开本页。
+        //     判据从「hubMode」改为「有没有 api 取数通道」：
+        //       - 有 api  → 走 pinNow()（原地定位，与 v2.3.8 行为一致）；
+        //       - 无 api  → 才退回跳总览页（极少数：REST 不可用），并如实改按钮文案。
+        var canPin = !!island.api;
+        if (hubMode ? (!canPin) : false) {
+          // 兜底：没有任何取数通道时，跳总览页是唯一能让读者换到别处的路
+          btn.addEventListener('click', function () {
+            if (hubUrl) { window.location.assign(hubUrl); }
           });
-        });
+          if (hubUrl) {
+            btn.setAttribute('title', '到观测地总览页按位置选择');
+          }
+        } else {
+          btn.addEventListener('click', function () {
+            manual = false;
+            setStatus(root, '正在按访问位置选择最近的预置观测地…');
+            // ★ v2.3.5：跨省时的「仍改用 X」按钮动作 = 套用 ＋ 回写下拉与网格。
+            //   与态三走的是同一条落点，只是在读者确认后才执行。
+            function adoptTarget(key) {
+              if (!apply(root, island, key)) { return; }
+              manual = true;
+              if (sel) {
+                if (sel.querySelector('option[value="' + key + '"]')) { sel.value = key; }
+              }
+              ensureOption(root, key, island.index[key][F_CN]);
+              syncGrid(root, island, key);
+              setStatus(root, '已改用「' + island.index[key][F_CN] + '」。');
+            }
+            locate(function (hit) {
+              if (!hit) {
+                setStatus(root, '定位失败（接口不可达或被浏览器拦截），已保持当前观测地。');
+                return;
+              }
+              // ★ v2.3.10：hub 模式需先把「最近的那座城」那一行取回来，
+              //   否则 autoApply() 内部读 island.index[n.key] 会得到 undefined。
+              if (!hubMode) {
+                var res0 = autoApply(root, island, sel, hit, '。',
+                  function () { adoptTarget(res0.key); });
+                void res0;
+                return;
+              }
+              var near = nearest(island, hit.lat, hit.lon);
+              if (!near) {
+                setStatus(root, '未能取得可用坐标，已保持当前观测地。');
+                return;
+              }
+              fetchPlaceRow(island, near.key, function (row) {
+                if (!row) {
+                  setStatus(root, '已按访问位置找到最近的预置观测地，但未能取到该地今日数据，'
+                    + '已保持当前观测地。可到「观测地」页改选。');
+                  return;
+                }
+                addRow(island, row);
+                var liveCur = root.getAttribute('data-kcj-place-cur') || '';
+                if (liveCur) { island.cur = liveCur; }
+                if (!island.index[island.cur]) { island.cur = (island.order[0] || ''); }
+                var res = autoApply(root, island, sel, hit, '。',
+                  function () { adoptTarget(res.key); });
+                if (res ? (res.applied ? res.key : '') : '') {
+                  ensureOption(root, res.key, island.index[res.key][F_CN]);
+                  manual = true;
+                }
+              });
+            });
+          });
+        }
       }
 
-      if (island.mode === 'auto') { autoRoots.push(root); }
+      // ★ v2.3.9／v2.3.10：入列条件。
+      //   v2.3.9 曾写 `if (!hubMode) { autoRoots.push(root); }` —— 即 hub 模式不入列，
+      //     理由是「数据不在本页，回填与定位做了也无处落」。**这条判断在 v2.3.10 被修订**：
+      //     数据确实不在本页，但可以**按需取**（fetchPlaceRow + addRow）⇒ 应当入列。
+      //     不入列的代价是「读者在总览页选过的城，回首页不生效」—— 那不是取舍，是功能丢失。
+      if (island.mode === 'auto') {
+        autoRoots.push(root);
+      }
     });
 
     // ★ v2.3.6：**定位之前**先把「独立页选过的城」应用上 ——
     //   手动选择优先于自动定位（第③条硬约束）。读者专程去独立页选了一次，
     //   回来若被 IP 定位覆盖，等于白选（且会让「已在深圳」这类误判反复出现）。
     //   ⇒ 有存档就应用 ＋ 把 autoRoots 清空（不再跑自动定位）。
+    //
+    // ★ v2.3.10：hub 模式（首页只剩 1 行）下，存档城那一行**不在页内**，
+    //   故先按需取回再应用。取不到（离线／该日无数据／端点不可达）则**保持现状**：
+    //   hub 模式下不写「已按当前观测地显示」那类断言句，改为如实说明「本页按 X 计算」，
+    //   免得页面把默认城说成读者的选择。
     var saved = readStore();
     if (saved) {
-      var used = false;
+      applySaved(saved);
+    }
+
+    /**
+     * 应用存档城。同步路径能直接落到 apply()；hub 模式需先取那一行。
+     *
+     * @param {string} key 存档的锚点键
+     */
+    function applySaved(key) {
+      if (!key) { return; }
+      var pending = [];   // 本页没有该行、需要按需取的 root 列表
       Array.prototype.forEach.call(autoRoots, function (root) {
         var isl = parseIsland(root);
         if (!isl) { return; }
-        if (!isl.index[saved]) { return; }
-        if (!apply(root, isl, saved)) { return; }
-        var sl = root.querySelector('.kcj-astro-place-select');
-        if (sl) {
-          if (sl.querySelector('option[value="' + saved + '"]')) { sl.value = saved; }
+        if (isl.index[key]) {
+          // 行在页内（非 hub 模式，或该城恰是默认城）⇒ 直接走原路径
+          if (!apply(root, isl, key)) { return; }
+          var sl = root.querySelector('.kcj-astro-place-select');
+          if (sl) {
+            if (sl.querySelector('option[value="' + key + '"]')) { sl.value = key; }
+          }
+          syncGrid(root, isl, key);
+          setStatus(root, describe(root, isl, sl));
+          savedDone(root);
+          return;
         }
-        syncGrid(root, isl, saved);
-        setStatus(root, describe(root, isl, sl));
-        used = true;
+        // hub 模式：本页只有 1 行，取回存档城那一行
+        pending.push({ root: root, island: isl });
       });
-      if (used) {
-        stored_once = true;
-        autoRoots = [];
+
+      if (!pending.length) { return; }
+
+      pending.forEach(function (item) {
+        fetchPlaceRow(item.island, key, function (row) {
+          // 取不到：保持现状，但把状态行写成**如实**的（不宣称是读者的选择）
+          if (!row) {
+            if (item.island.isHub) {
+              var sl0 = item.root.querySelector('.kcj-astro-place-select');
+              var cur0 = item.island.cur || '';
+              var cn0 = item.island.index[cur0] ? item.island.index[cur0][F_CN] : cur0;
+              setStatus(item.root, hubStatus(item.island, cn0, key, false));
+              void sl0;
+            }
+            savedDone(item.root);
+            return;
+          }
+          if (!addRow(item.island, row)) { savedDone(item.root); return; }
+          if (!apply(item.root, item.island, key)) { savedDone(item.root); return; }
+          var sl = item.root.querySelector('.kcj-astro-place-select');
+          if (sl) {
+            if (sl.querySelector('option[value="' + key + '"]')) { sl.value = key; }
+          }
+          syncGrid(item.root, item.island, key);
+          if (item.island.isHub) {
+            // hub 模式：apply() 已把卡片数值与城市标签换成该城，
+            //   但下拉里没有该项（服务端只渲染了 1 项）⇒ 需要补一个 option，
+            //   否则 sel.value / describe() 会与实际显示不一致。
+            ensureOption(item.root, key, row[F_CN]);
+            setStatus(item.root, hubStatus(item.island, row[F_CN], key, true));
+          } else {
+            setStatus(item.root, describe(item.root, item.island, sl));
+          }
+          savedDone(item.root);
+        });
+      });
+    }
+
+    /**
+     * 存档已处理完 → 标记「手动优先」，并把已处理的 root 从自动定位队列里移出。
+     * 一个 root 处理完就移一个，避免「部分 root 取数失败」时整批定位被误开或误关。
+     */
+    function savedDone(root) {
+      stored_once = true;
+      var left = [];
+      for (var i = 0; i < autoRoots.length; i++) {
+        if (autoRoots[i] !== root) { left.push(autoRoots[i]); }
       }
+      autoRoots = left;
+    }
+
+    /**
+     * hub 模式的状态行文案（v2.3.10）。
+     *
+     * 为什么要单独一条：hub 模式下「读者存档的城」与「服务端默认城」可能不同，
+     *   而**页面卡片上的数值永远来自某一个具体的城**。文案必须把这两件事说清：
+     *     - applied=true  → 数值已按读者选择显示；
+     *     - applied=false → 取数失败，数值仍按默认城，**且要讲明读者选的是哪座**，
+     *                       否则读者会以为自己的选择被静默丢弃（v2.3.9 的老毛病）。
+     */
+    function hubStatus(island, cn, savedKey, applied) {
+      var nTotal = island.total ? ('今日共 ' + island.total + ' 个预置观测地可选') : '可到「观测地」页切换';
+      if (applied) {
+        return '已按你的选择显示「' + cn + '」。' + nTotal + '，可在该页改选。';
+      }
+      return '当前按「' + cn + '」计算。' + nTotal
+        + '；你上次选的是「' + savedKey + '」，本次未能取到该地数据。';
+    }
+
+    /**
+     * hub 模式下把某个城补进下拉（v2.3.10）。
+     *
+     * 为什么必须补：apply() 只改卡片与标签，而 describe() / sel.value 以 select 为准。
+     *   hub 模式服务端只渲染 1 个 <option>，若不补，就会出现「卡片显示广州、下拉写着揭阳」
+     *   这种自相矛盾 —— 正是 v2.3.6 强调要避免的「两套机制并存」。
+     */
+    function ensureOption(root, key, cn) {
+      var sel = root.querySelector('.kcj-astro-place-select');
+      if (!sel) { return; }
+      if (sel.querySelector('option[value="' + key + '"]')) { return; }
+      var op = document.createElement('option');
+      op.value = key;
+      op.setAttribute('data-anchor', key);
+      op.textContent = cn || key;
+      sel.appendChild(op);
+      sel.value = key;
     }
 
     if (!autoRoots.length) { return; }
@@ -829,8 +1074,41 @@
           syncGrid(root, island, key);
           setStatus(root, '已改用「' + island.index[key][F_CN] + '」' + tail);
         }
-        var res = autoApply(root, island, sel, hit, tail,
-          function () { adoptAuto(res.key); });
+
+        // ★ v2.3.10：hub 模式下 island 只带 1 行，而 autoApply() 内部**多处直接读
+        //   `island.index[n.key]` / `island.index[curKey]`** —— 若定位命中的是别的城，
+        //   这些读取会得到 undefined（不报错但会把城市名写成空，甚至崩）。
+        //   ⇒ 先把「最近的那座城」那一行取回并并入 index，再交给 autoApply。
+        //   取不到就不跑 autoApply，改为如实说明，避免拿默认城冒充定位结果。
+        if (!island.isHub) {
+          var res0 = autoApply(root, island, sel, hit, tail,
+            function () { adoptAuto(res0.key); });
+          return;
+        }
+        var near = nearest(island, hit.lat, hit.lon);
+        if (!near) {
+          setStatus(root, '未能取得可用坐标，已保持当前观测地。');
+          return;
+        }
+        fetchPlaceRow(island, near.key, function (row) {
+          if (!row) {
+            // 取不到：不冒充定位结果，如实讲明
+            var curCn1 = island.index[island.cur] ? island.index[island.cur][F_CN] : island.cur;
+            setStatus(root, '已按访问位置找最近的预置观测地，但未能取到该地今日数据，'
+              + '暂按「' + curCn1 + '」显示。可到「观测地」页改选。');
+            return;
+          }
+          addRow(island, row);
+          var liveCur2 = root.getAttribute('data-kcj-place-cur') || '';
+          if (liveCur2) { island.cur = liveCur2; }
+          if (!island.index[island.cur]) { island.cur = (island.order[0] || ''); }
+          var res = autoApply(root, island, sel, hit, tail,
+            function () { adoptAuto(res.key); });
+          // 命中并套用后，hub 模式下拉里仍只有服务端那 1 项 ⇒ 补上，免得「卡片与下拉不一致」
+          if (res ? (res.applied ? res.key : '') : '') {
+            ensureOption(root, res.key, island.index[res.key][F_CN]);
+          }
+        });
       });
     });
   }

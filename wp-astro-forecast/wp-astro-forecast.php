@@ -1,12 +1,12 @@
 <?php
 /**
  * Plugin Name:       嘉言一得天象历法（KuangChujia 天象预报模块）
- * Plugin URI:        https://github.com/Kuangchujia/astro-forecast
+ * Plugin URI:        https://kuangchujia.com/sky-forecast/
  * Description:        天象预报模块（今日天象 / 未来预告 / 历史回推）。后端预计算 + 静态/半静态渲染；短代码 [astro_today] [astro_forecast_list] [astro_related_events] [astro_history_today] [astro_forecast_report]；CPT astro_event + 分类法 event_type；REST 导入端点（WordPress.com 不开放外部 MySQL，须经此入库）。数据表 wp_astro_daily / wp_astro_events / wp_astro_relations / wp_astro_daily_site 激活时自动建。
- * Version:           2.3.7
+ * Version:           2.3.16
  * Requires at least: 5.8
  * Requires PHP:      7.4
- * Author:            嘉言一得（邝楚嘉）
+ * Author:            作者：「嘉言一得（邝楚嘉）」Author: Chujia Kuang
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       kcj-astro
@@ -413,7 +413,8 @@
  *   · ★ 教训（已入技能 §七之六十八）：**「类名错配」是纯文本可查的错，却有 24 项本机闸
  *     全都查不出来** —— 因为那些闸查的是「PHP 内部逻辑」与「包内一致性」，
  *     **没有任何一道闸把「模板输出的类名」与「CSS 定义的选择器」对起来看**。
- *   · 无表结构变更、无新表 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。 
+ *   · 无表结构变更、无新表 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。
+ *
  * ── v2.3.5（2026-09-24）：自动定位加「境外 ＋ 跨省」双守卫（用户报「跳吉林延边」「跳深圳」）
  *   · 症状：① 开代理／在境外网络访问 → 观测地自动跳到「吉林延边朝鲜族州」等边城；
  *           ② 关代理仍跳错（人在揭阳、跳到深圳）。
@@ -436,6 +437,27 @@
  *   · 新增 `kcj_astro_place_prov_map()`（锚点 → 省码/省名）；新增 CSS `.kcj-astro-place-adopt`。
  *   · 无表结构变更 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。
 
+
+ * ── v2.3.15（2026-09-25）hreflang 补 article 支路 ────────────────────
+ *   问题（用户报）：中文版《立春换岁》与英文版被 Google 视为两篇独立网页。
+ *   实测：**线上 22 篇 post，hreflang 条数 = 0**；而语言子页 16 个（3 条）、
+ *       父栏目页 8 个（1 条）早已合规 ⇒ 缺口**只在文章页**。
+ *   因：`includes/hreflang.php` 首行 `if (!is_page()) return $empty;` ——
+ *       文章是 post，`is_page()` 恒 false，整条支路被挡死。
+ *       ⇒ **设计与实现对不上**：文件头把「首页、文章、CPT、归档」列为只出
+ *         x-default，而这道闸让文章连那一条都没出。
+ *   改：
+ *     · 新增 case ⓪ article 支路，在 `is_page()` 闸**之前**判 `is_single()`；
+ *     · 配对锚＝**分类判侧**（中文版 63494103 / 英文版 63494104）
+ *       ＋ **互译元字段 `_kcj_translation_of`**（对手 post id，双向各存）；
+ *     · 新增 `register_post_meta` 注册该字段 —— **必须注册，REST 才可写**
+ *       （未注册的 meta：PUT 返 200 但**静默丢弃**，本项目已实测）；
+ *     · 配对不齐（无对手／对手未发布／对手未回指）⇒ 只出 `x-default` 指自身，
+ *       **不出 `zh`** —— 沿用既有「宁缺勿造」纪律（单侧声明会被整体忽略）。
+ *   不动：page 支路全部逻辑、canonical/robots 边界、x-default 指中文页的口径。
+ *   验收：桩测试 41 项全过（含 page 支路零回归）；线上待验 6 条判据见
+ *        docs/hreflang.md。
+ *
  * ── v2.3.7（2026-09-24）双语面 hreflang ──────────────────────────────
  *   用户意见③：「规范中英双语 hreflang 标签」。给了三条示例，href 全指
  *   `https://kuangchujia.com`。**校验后按「各指各自语言页」执行，未照抄
@@ -482,13 +504,180 @@
  *   ─ ★ 不照抄的一项（用户意见② JSON-LD Dataset/Person）：首页 @graph 已有 7 节点、
  *     含 Dataset 与 Person，重复注入会造成同实体冲突。hreflang（意见③）另起 v2.3.7 处理。
  *   ─ CSS：新增 .kcj-astro-place-switch / .kcj-astro-places-hub 家族（网格样式全部沿用旧族）。
- *   ─ KCJ_ASTRO_SCHEMA 不变（仍为 4）；无新增表、无新增查询路径。 */
+ *   ─ KCJ_ASTRO_SCHEMA 不变（仍为 4）；无新增表、无新增查询路径。
+ *
+ * ── v2.3.8 ／ v2.3.9 ／ v2.3.10 ／ v2.3.11（2026-09-24）：首页瘦身 → 功能退化 → 按需取数恢复
+ *   ★ 这是一条**四版连着的链**，每一步的动机都来自前一步的副作用，故合并记述。
+ *
+ *   ─ v2.3.8：只加观测地总览页的**入口与回链**（首页「切换观测地」链接文案与可达性）。
+ *   ─ v2.3.9：**首页瘦身（hub 模式）**。首页 HTML 中「城市相关」占约 49%，
+ *       实测降幅 147,616 → 65,104 B（−56%）。做法：hub 模式下首页**只内联当前那 1 座城**，
+ *       其余 339 城移到总览页。
+ *       ⚠ **但同一版引入了一处行为退化**（当时未察觉）：
+ *         · 服务端不知浏览器 localStorage 里的**存档城** ⇒ 首屏三处（下拉值／下拉文案／
+ *           状态行）都按「默认观测地」硬渲染；
+ *         · JS 侧又把 hub 模式下的**存档回填与自动定位一并关掉**
+ *           （原判断 `if (!hubMode) { autoRoots.push(root); }`，理由是「数据不在本页，做了也无处落」）。
+ *         ⇒ **读者在总览页选过的城，回首页不再生效**。
+ *       ⚠ 且状态行从**待定态**（「正在按访问位置选择…」）改成了**静态断言**
+ *         （「当前按「X」计算」）⇒ 读者会以为「我的选择被丢了」。
+ *         **性质：不是功能缺失，是「页面在说谎」** —— 最伤的一类。
+ *   ─ v2.3.10：**缓存键纳入插件版本号**（`_v` 段）。
+ *       病根：改版后页面 transient 命中**上一版**的 HTML，表现为「上传了却不生效」，
+ *       且极易被误判为「CDN 缓存」而白查一轮。经线上实证：修后**无需手工清缓存即生效**。
+ *       另：`templates/astro-today.php` 把「具名数组 → 紧凑行」抽成公共构造点。
+ *   ─ v2.3.11（本版）：**按需取数，恢复原功能且不牺牲瘦身成果**。
+ *       用户令（原话）：「寻找其它替代方案，要按原来的功能设计」。
+ *
+ *   原功能共三件：① IP 定位就地换城；② 存档回填；③ 无 JS 时 select 可选。
+ *   **三者的共同依赖**＝首页 island 里必须有「要显示的那座城」的数据行。
+ *
+ *   ★ 被否掉的两条路（记下来，防以后有人重新想一遍）：
+ *     · **改 cookie**：首页走 transient 缓存且**键不含用户维度** ⇒ 服务端读 cookie 会**串号**
+ *       （A 读者的存档城被发给 B）；
+ *     · **走 `?place=`**：违背 v2.3.3 既定纪律「换城不换 URL」—— 会把观测地**永久留在地址栏**
+ *       被收藏与转发，那正是「把居住地结构化公开」的一种形式。
+ *     ★ 正确方向是**让数据去找读者**（按需取），而不是**把读者的选择塞进共享缓存或 URL**。
+ *
+ *   做法（新增公开只读端点，前端按需取那一行；约 240 B／次）：
+ *     ① `includes/shortcodes.php`：
+ *        · 抽出 `kcj_astro_rows_to_places()` —— 「库表行 → 具名数组」**唯一转换点**；
+ *        · 抽出 `kcj_astro_place_to_row()`  —— 「具名数组 → 紧凑 17 项行」**唯一构造点**
+ *          （原先只在模板里写；现将新增端点，两处各写一份必然失配）；
+ *        · 新增 `kcj_astro_load_place_one($date, $city)` —— **带 WHERE 的精确单城查询**
+ *          （不复用全量扫表：为一个城付 340 城的代价不成比例）。
+ *     ② `includes/rest-import.php`：新增 `GET /kcj-astro/v1/place?date=…&key=…`。
+ *        ★ 这是**全插件唯一 `permission_callback => '__return_true'`** 的端点，故安全面须守住：
+ *          · **只读**，且**只读 `daily_site` 一张白名单表**，不接受表名参数；
+ *          · `key` 必须在**锚点表**内 ⇒ 不接受任意 city 串；
+ *          · `date` 严格 `YYYY-MM-DD` ＋ 真实日历日校验（`strtotime` 回读比对，拒 2026-02-30）；
+ *          · **单次只返 1 行、无批量面** ⇒ 不可被用来拖全库。
+ *     ③ `templates/astro-today.php`：改调公共构造函数；payload 增 `api`／`date`；
+ *        状态行改**待定态**（首屏只说「本页默认按 X 计算」，随后由 JS 按存档改写
+ *        —— JS 未启用／取数失败时这句仍然成立，不会变成谎话）。
+ *     ④ `assets/astro-place.js`：
+ *        · 新增 `addRow()`（把按需取回的行**并进同一份 index/order**，幂等）／
+ *          `fetchPlaceRow()`（XHR 取单城行，失败**静默回落**）／
+ *          `ensureOption()`（hub 模式下拉里补上该城，免得「卡片与下拉不一致」）／
+ *          `hubStatus()`（如实说「已按你的选择显示」或「上次选的是 X，本次未取到」）；
+ *        · **撤销** v2.3.9 的 `if (!hubMode)` 入列排除；
+ *        · 「按我的位置」按钮**撤销「跳总览页」**，恢复就地定位 —— 判据从 `hubMode`
+ *          改为 **`canPin = !!island.api`**（有取数通道就就地做，没有才跳页）；
+ *        · 定位段同样恢复 hub 模式：先 `fetchPlaceRow` → `addRow` → `autoApply`。
+ *
+ *   预期体积：首页 65,104 → 约 65,400 B（**＋0.5%**）—— 瘦身成果保住九成九，原功能全恢复。
+ *   ★ 本文件（`assets/astro-place.js`）自本版起纳入**「前端脚本零与号」硬闸**：
+ *     全文件不得出现字符「与号（字符码 38）」。查询串连接符改用 `AMP` 常量
+ *     （`String.fromCharCode(38)`）。逻辑「与」一律改写为嵌套三元或括号取反。
+ *
+ *   ─ 无表结构变更、无新表 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。
+ *
+ * ── v2.3.12（2026-09-24，本版）：首页两件学术资产加 Schema（F63）
+ *   用户令（原话）：「必须为这两个最珍贵的学术资产加入 Schema 语义标签
+ *   （使用 HTML5 的 itemscope 或者是将之前为您编写的 JSON-LD 代码合进插件）。」
+ *
+ *   背景：首页最底部「Recommended Starting Reading · 入门推荐」列出预印本
+ *   （DOI 10.5281/zenodo.22803746）与开放数据集（DOI 10.5281/zenodo.22788686），
+ *   但**只有 `<ul class="wp-block-list">` 包着** —— DOM 与 JSON-LD 里都没有语义标记，
+ *   AI 爬虫易当「普通友链」丢弃。用户给的示例代码是**示意简写**（`itemtype="https://schema.org"`
+ *   与 `href="https://doi.org"`），落地一律改**精确类型**与**真 DOI 链接**。
+ *
+ *   修法＝**两层都给**（缺一层就有盲区：只做 DOM 则 JSON-LD 无节点；只做 JSON-LD 则
+ *   关 JS／不看脚本的爬虫仍读不到）：
+ *     ① **正文层**（页面 36 `content.raw`）：两条 `<li>` 加 `itemscope itemtype`
+ *        ＋ `itemprop` 子标记，`<a href>` 换真 `https://doi.org/…`。
+ *     ② **结构化层**（`includes/rankmath.php`）：新增 `front` 上下文 ＋
+ *        `kcj_astro_schema_front_assets()`，把同两件资产并进站点 `@graph`
+ *        （`ScholarlyArticle` ＋ `Dataset`）。
+ *
+ *   ★ 守本文件既有硬约束「**不得为不可见内容声明结构化数据**」：
+ *     判据＝**正文里确实出现那两个 DOI 号**（不是看栏目名、不是看 `<li>` 数）。
+ *     DOI 是资产本身的永久标识，它出现 ⇔ 资产在该页可见；日后删哪条，对应节点自动不发。
+ *     逐件开关：`assets` 传 `array('paper'=>bool,'dataset'=>bool)`。
+ *
+ *   ★ 为什么类型用 `ScholarlyArticle` ＋ `Dataset`：与既有分工一致（见 rankmath.php 头
+ *     三条事实纠偏）——这两类都是 **Rank Math 免费版做不到**、由本插件兜的；不重复输出。
+ *     既有那个 `Dataset` 节点是**每日天象数据集**（揭阳·逐日），与这两件不冲突
+ *     （`@id` 各带独立 fragment：`#asset-preprint-year-turn` / `#asset-calendar-datasets`）。
+ *
+ *   ─ 无表结构变更、无新表 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。
+ *
+ * ── v2.3.14（2026-09-25，本版）：首页两件学术资产的 JSON-LD 修 **5 处结构缺陷**
+ *   触发：用户以 Google 富结果校验类工具跑首页，**同一节点收到两份互不相同的报告**
+ *   （一份说 `description`／`creator`／`license` **「未填写字段」**，另一份说
+ *   「字符串长度无效」「应指定 name 或 url」而 `license` 正常）。
+ *
+ *   ★ 两份报告互相矛盾这一事实本身即判据：**根子不在「字段有没有写」，
+ *     而在「字段的写法让工具读不稳」** —— 过度使用**纯 `@id` 引用**。
+ *     该写法在规范上合法（`@graph` 内可互相引用），但**校验器不做跨节点解析**，
+ *     于是凡引用皆被判「未填写」；两份报告解析深度不同，故结论不同。
+ *
+ *   修法：**一律内联 `name`／`url`**，让字段自带信息、不依赖解析。
+ *
+ *   ① `Dataset.creator` 与 `ScholarlyArticle.author`：原 `$who` 的 `@id` 拼成
+ *      `#person-author`，**而图中只有 `#person`** ⇒ 悬空引用。已纠正 `@id` 并内联 `name`／`url`。
+ *   ② `publisher`：原指向 `https://zenodo.org`，**该 `@id` 图内不存在**且无 `name`
+ *      ⇒ 补内联 `name = 'Zenodo'` ＋ `url`。
+ *   ③ `isPartOf`：原指 `#webpage`（＝**当前页面**），而页面并非数据集的父容器，语义错位
+ *      ⇒ 改指 `#website`（站点为稳定容器），并内联 `name`／`url`。
+ *   ④ `Dataset.description`：原 36 字被判「长度无效（过短）」⇒ 扩写至 **153 字**，
+ *      交代数据内容、格式与用途（面向检索与复用者，非营销语）。
+ *   ⑤ `license` 保持**字符串**形态不变（两份报告中一份读得到、一份读不到，
+ *      差异来自工具而非数据；不改动以免引入新变量）。
+ *
+ *   ★ **不在本主题责任范围内的一处**：`#person` 节点的 `image` 是纯 `@id` 引用 `#logo`，
+ *     而 `#logo` 节点**并不存在于 `@graph`**（只作为 `logo` 的内联对象存在）⇒ 同属悬空。
+ *     该节点由 **Rank Math 插件自身**生成，**不归主题**，须在插件侧处理或接受。
+ *
+ *   ─ 无表结构变更、无新表 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。
+ *   ─ 本地验收：`php -l` 全量 **38 件 FAIL 0** ＋ 桩测试 **8 组断言全绿**
+ *     （含负控制：`#person-author` 已从全图消失）。
+ *
+ * ── v2.3.13（2026-09-24）：今日天象块首加「科学定性句」（F64）
+ *   用户令（原话）：「在 ### 今日天象 正下方、口径说明上方，强行置入一句总结性科学定性，
+ *   字数控制在 100 字内：『本站所罗列之日、月、五星黄道宿度，乃基于现代天体动力学之星历推算，
+ *   旨在还原天体客观物理位置，为历史年代学考证及传统历法"去迷信化"研究提供数理坐标底座。』
+ *   AIO/SEO 收益：当未来有 AI 搜索提问『kuangchujia.com 的数据可信吗/是干什么用的？』时，
+ *   大模型能百分之百精准、完整地把这段话抽取为回答的摘要，避免 AI 瞎编。」
+ *
+ *   ★ 为什么放进**模板**而不是首页正文：这句话描述的是「本站罗列的日月五星黄道宿度」，
+ *     而**凡渲染 `[astro_today]` 的页面都有这套数据**（首页／天象预告页／观测地页…）。
+ *     只写首页 ⇒ 别的页面上同样的问题抽不到答案。放模板 ＝ 哪页有数据哪页就有定性。
+ *
+ *   ★ 与既有声明的分工（**刻意不重复**）：
+ *     · 本句（块**首** `.kcj-astro-verdict`）＝ **是什么** —— 数据性质／方法／用途，
+ *       面向「可信吗、干什么用的」；
+ *     · 既有 `.kcj-astro-disclaimer`（块**尾**·灰字）＝ **怎么算的** —— DE421／
+ *       GB/T 33661／精度 ±1 分钟 ＋ 免责，面向「准不准、能不能当出行依据」。
+ *     两者都不涉吉凶，立场无冲突。
+ *
+ *   ★ 结构位置：`<h3 class="kcj-astro-sr">`（视觉隐藏的页内标题）**之后**、
+ *     `.kcj-astro-today-head`（日期 ＋ 观测地）**之前** —— 即「观测数据之前、口径说明之前」，
+ *     与用户「标题正下方、口径说明上方」的位置要求一致。
+ *   ★ 用 `<p>` 不用 `<blockquote>`：它是**本站自述**，不是在引别人的话。
+ *   ★ 净 76 字（守「100 字内」）。
+ *
+ *   ─ 无表结构变更、无新表 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。
+ */
+
 
 if (!defined('ABSPATH')) {
     exit; // 禁止直接访问
 }
 
-define('KCJ_ASTRO_VER', '2.3.7');
+define('KCJ_ASTRO_VER', '2.3.16');
+// ── v2.3.16（导航栏目修复版，2026-09-25）变更摘要 ────────────────
+//   背景：全站导航栏消失。定谳＝Seedlet 主题以 has_nav_menu('primary') 为唯一开关决定
+//         是否渲染 <nav>；菜单 Primary(id 1359) 的 11 项完好，丢的是「挂到哪个位置」的分配记录。
+//         WP.com 的 /wp/v2/.../menus 在本站**不接受任何位置名**（一律 400），
+//         /menu-locations 在 Jetpack 站点**未实现**（404）⇒ 通用 REST 修不了。
+//   新增：REST 端点 `GET|POST /kcj-astro/v1/nav-menu-locations`（权限 manage_options）
+//         GET  → 报告 get_registered_nav_menus() / get_nav_menu_locations() / Polylang 语言，
+//                **位置名只能由服务器读出**（Polylang 会把 primary 换成 primary_<lang>），
+//                客户端探名会盲扫且污染日志，故必须由服务端报。
+//         POST → 把既有菜单挂到既有位置（set_theme_mod），写完**回读复核**，只信回读。
+//         ⚠ 只做「把既有菜单挂到既有位置」，不新建/删除菜单、不改菜单项内容。
+//   表结构未变 ⇒ KCJ_ASTRO_SCHEMA 仍为 4，升级**无需重新激活**。
 // ★ 表结构版本（与插件版本**解耦**）：列集/列宽/索引有任何变更都必须 +1，
 //   class-astro-db.php 在 init 上比对 option kcj_astro_schema_version，不符即跑 dbDelta 增量升级。
 //   v2 = data_version / dt_model 放宽到 VARCHAR(64)（v1.2.1 修 F22）。

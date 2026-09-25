@@ -23,7 +23,7 @@
 
 ```bash
 python python/compute_sky.py --selftest        # 预期：通过 31 项
-python verify_package.py                       # 预期：通过 470 项
+python verify_package.py                       # 预期：通过 497 项
 python php_selftest.py                         # 预期：通过 48 项
 python python/build_dataset.py --selftest      # 预期：通过 51 项
 python make_zip.py --selftest                  # 预期：通过 7 项
