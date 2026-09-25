@@ -263,6 +263,13 @@ function kcj_astro_schema_collection($items) {
 /**
  * 首页「Recommended Starting Reading · 入门推荐」两件学术资产。
  *
+ * ★ 2026-09-25（v2.3.17）：补 `headline`（仅预印本）与 `image`（两件）。
+ *   依据＝Google 富结果对这两节点报「未填写 image / headline / author」共 5 条提示；
+ *   逐条核线上原文后确认：**真缺 2 条**（预印本 headline、两件 image），
+ *   **误报 3 条**（预印本 author 实为 Person 且已填；Dataset 用 creator、不适用 author/headline
+ *   —— 那是 Article 家族规则套到 Dataset 上）。故本次**只补真缺的两项**。
+ *   仍有 3 条误报提示属校验器规则所限，**不为消提示而添加无意义字段**。
+ *
  * ★ 2026-09-24（F63）新增。起因：用户核出首页最底部那两条 DOI 虽在正文里，
  *   却**只有 `<ul class="wp-block-list">` 包着**——DOM 与 JSON-LD 里都没有任何语义标记，
  *   AI 爬虫容易当「普通友链」丢弃。修法＝**两层都给**：
@@ -309,6 +316,13 @@ function kcj_astro_schema_front_assets($which = array()) {
         'url'   => $home,
     );
     $out = array();
+    // ★ v2.3.17（2026-09-25）：Google 富结果报这两件资产「未填写 image」。
+    //   修法＝取站点**已有且真实可访问**的那张 OG 图 —— 与本图内 #richSnippet 节点同源，
+    //   不新引任何外部资源。用 CDN 形态（i0.wp.com ... ?fit=1200%2C630），与图内既有
+    //   ImageObject 节点的 URL 形态保持一致，避免同一张图出现两种写法。
+    //   ⚠ 硬约束：图片必须是真实存在的资源 —— 不得填占位域（如 https://wp.com），
+    //     那会让「未填写」变成「填了但无效」，评分可能更低。
+    $og_image = 'https://i0.wp.com/kuangchujia.com/wp-content/uploads/2026/09/og-site-3.jpg?fit=1200%2C630&amp;ssl=1';
 
     // ① 预印本（002 · 换岁节点考据）
     if ($want('paper')) {
@@ -316,7 +330,11 @@ function kcj_astro_schema_front_assets($which = array()) {
             '@type'            => 'ScholarlyArticle',
             '@id'              => $home . '#asset-preprint-year-turn',
             'name'             => 'When Does the Year Turn: at Lichun, or at the First Day of the First Month?',
+            // ★ v2.3.17：Google 对 Article 家族（含 ScholarlyArticle）**另有 headline 必填项**，
+            //   填了 name 仍会报「未填写 headline」。按 Article 家族惯例，headline 与 name 同值。
+            'headline'         => 'When Does the Year Turn: at Lichun, or at the First Day of the First Month?',
             'alternativeHeadline' => '立春换岁，还是正月初一换岁？',
+            'image'            => $og_image,
             'abstract'         => '中国历法换岁节点的原始文献考据：立春换岁与正月初一换岁两说的来历与文献依据。',
             'inLanguage'       => array('en', 'zh-Hans'),
             'author'           => $who,
@@ -342,6 +360,9 @@ function kcj_astro_schema_front_assets($which = array()) {
             '@type'            => 'Dataset',
             '@id'              => $home . '#asset-calendar-datasets',
             'name'             => 'Chinese Calendar Open Datasets',
+            // ★ v2.3.17：同上报「未填写 image」。Dataset 无 headline/author 之要求
+            //   （那是 Article 家族的规则，套到 Dataset 上属误报），故此处**只补 image**。
+            'image'            => $og_image,
             'version'          => '1.0.0',
             // ★ 2026-09-25：原 36 字被判「description 字符串长度无效（过短）」⇒ 扩写到 150+ 字，
             //   交代数据内容、时间跨度、文件形态与用途（面向检索与复用者，非营销语）。
@@ -454,6 +475,62 @@ add_filter('rank_math/json_ld', function ($data, $jsonld = null) {
     }
     return $data;
 }, 5, 2);
+
+/**
+ * ★ v2.3.18（2026-09-25）：把「街道级地址」从结构化数据里滤掉。
+ *
+ * 背景：Rank Math 的「知识图谱 / 个人」设置把 `PostalAddress` 整块输出到站点每一页的
+ *   `@graph`（实测首页 / About / Papers / 典籍页各 1 处），其中 `streetAddress` 是
+ *   **精确到门牌小区**的住址。结构化数据是**写给机器读的公开数据** —— 比页面上肉眼可见
+ *   的文字更容易被采集与聚合，故只保留到「省 + 邮编 + 国别」，删掉街道层。
+ *
+ * 为什么只删一个字段、其余一律保留：用户口径是「详细地址隐藏，其它可以公开」。
+ *   故 `addressRegion`（广东）/ `postalCode` / `addressCountry`（中国）/ `email` /
+ *   `telephone` 全部**原样保留**，`@type` 也保留（只去字段、不去节点类型）。
+ *
+ * 为什么用递归遍历而非定点改键：Rank Math 的 `@graph` 结构随版本与页面类型变化
+ *   （首页 8 节点、非首页 6 节点，节点位置不确定），且地址块可能嵌在任意节点下。
+ *   定点路径会在下次升级时**静默失效** ⇒ 改为「深度优先找所有带 streetAddress 的节点」。
+ *
+ * ⚠ 本过滤器只对 **Rank Math 的输出**生效。若日后本插件自己也输出地址，须另行处理。
+ * ⚠ 这是**输出层过滤**，不改 Rank Math 的存储值 —— 后台设置里那个地址还在，
+ *   只是不再进 `@graph`。若要从根上删除，须去 Rank Math 后台设置。
+ *
+ * @param array $data Rank Math 的 @graph 数组（每个元素是一个节点）
+ * @return array 过滤后的数组
+ */
+add_filter('rank_math/json_ld', function ($data) {
+    if (!is_array($data)) {
+        return $data;
+    }
+    foreach ($data as &$node) {
+        kcj_astro_schema_strip_street($node);
+    }
+    unset($node);
+    return $data;
+}, 99);
+
+/**
+ * 递归删除节点（及其子节点）里的 `streetAddress` 键。
+ * 只删这一个键：其余地址成分与节点类型全部保留。
+ *
+ * @param mixed $v 任意节点/子节点（引用传入，就地修改）
+ * @return void
+ */
+function kcj_astro_schema_strip_street(&$v) {
+    if (!is_array($v)) {
+        return;
+    }
+    // 仅当该层是「地址节点」时才动它 —— 用 @type 判，避免误删同名业务字段。
+    if ((isset($v['@type']) && $v['@type'] === 'PostalAddress')
+        || (isset($v['streetAddress']) && !isset($v['@type']))) {
+        unset($v['streetAddress']);
+    }
+    foreach ($v as &$child) {
+        kcj_astro_schema_strip_street($child);
+    }
+    unset($child);
+}
 
 /** Rank Math 未启用时：自己往 head 打一份（优先级 20，排在正文之前） */
 add_action('wp_head', function () {

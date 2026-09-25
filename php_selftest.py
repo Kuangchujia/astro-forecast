@@ -121,6 +121,14 @@ switch ($GLOBALS['kcj_case']) {
         // 只测栏目激活态（URL → 该开哪一栏）；渲染走 kcj_astro_render_template，
         // 用页面内固定的 sections，不查库、不依赖查询上下文。
         break;
+    case 'front':
+        // ★ v2.3.17 / v2.3.18：首页。正文含两个 DOI 锚（rankmath.php 的 front 判据就认它）
+        //   ⇒ context = front ⇒ 出预印本 + 数据集两件学术资产。
+        //   同时这一页也是「Rank Math 补站点级实体」的现场 —— 地址过滤的观察面就在那儿。
+        $GLOBALS['kcj_pid']     = 36;
+        $GLOBALS['kcj_content'] = '<ul><li>Preprint DOI 10.5281/zenodo.22803746</li>'
+                                . '<li>Datasets DOI 10.5281/zenodo.22788686</li></ul>';
+        break;
     case 'bulk_upsert':
         // 只测导入器多行快路径（真跑 kcj_astro_rest_bulk_upsert），不依赖查询上下文。
         break;
@@ -137,9 +145,13 @@ function add_shortcode($tag, $cb) { $GLOBALS['kcj_shortcodes'][$tag] = $cb; retu
 /* ---- 查询上下文 ---- */
 /* ★ 这里必须是**白名单式的字面清单**：新增 case 一律要登记，否则会被误判成
    「CPT 单篇」而走错分支（本轮 hub_page 就踩了：报出一堆与缺陷无关的错）。 */
-function is_singular($t = '') { $c = $GLOBALS['kcj_case']; if (in_array($c, ['collection', 'daily', 'daily_no_shortcode', 'hub_page', 'hub_page_today_off'], true)) { return false; } return $t === '' ? true : $t === KCJ_ASTRO_CPT; }
+function is_singular($t = '') { $c = $GLOBALS['kcj_case']; if (in_array($c, ['collection', 'daily', 'daily_no_shortcode', 'hub_page', 'hub_page_today_off', 'front'], true)) { return false; } return $t === '' ? true : $t === KCJ_ASTRO_CPT; }
 function is_post_type_archive($t = '') { return $GLOBALS['kcj_case'] === 'collection' && $t === KCJ_ASTRO_CPT; }
 function is_tax($t = '') { return false; }
+/* ★ v2.3.18：首页单列一类（rankmath.php 的 context 三分支之一）。
+   ⚠ 必须进 is_singular 的排除名单 —— 否则首页会被误判成 CPT 单篇，
+     报出一堆与缺陷无关的错（v2.3.2 加 hub_page 时踩过同一个坑）。 */
+function is_front_page() { return $GLOBALS['kcj_case'] === 'front'; }
 
 /* ---- 文章 API ---- */
 function get_the_ID() { return (int) $GLOBALS['kcj_pid']; }
@@ -466,27 +478,104 @@ if ($GLOBALS['kcj_case'] === 'bulk_upsert') {
  *   Rank Math 的 add_context_data() 挂优先级 10，其 can_add_global_entities() 在 singular 页
  *   先看 `! empty( $data )`（class-jsonld.php L379）。
  */
+/* ★ v2.3.18 修桩：站点级实体的**注入时机**原先放在全部回调跑完之后，
+   而现实中它们是 Rank Math 自己挂在**优先级 10**（add_context_data）塞进同一个 $data 的 ——
+   塞完还要过排在更后面的过滤器（本插件的地址过滤在 99）。
+   桩若在最后才 append，过滤器永远看不到 #person ⇒「过滤生效」这条判据
+   **必然假红**（本轮实测：报 streetAddress 仍在）。
+   ⇒ 按真实时序改写：遍历回调时，凡遇到 prio >= 10 的那一个，**先注入再调它**。
+   ⚠ 这正是「桩与真实调用顺序不一致 ⇒ 测出来的不是线上会发生的」这一类失真，
+     本项目已在 is_singular 白名单、get_row 按 SQL 形状认等处踩过两次。 */
 $data = [];
 $prios = [];
+$globals_added = false;
+$rm_injected = false;
+$inject_globals = function (&$data) {
+    // Rank Math「知识图谱／个人」设置的真实形态 —— 实测线上首页 / About / Papers / 典籍页各 1 处。
+    // ⚠ 桩里必须**真的摆出来**，否则 kcj_astro_schema_strip_street 永远无事可做，
+    //   「过滤生效」这条判据就成了恒真 —— 本项目最忌的「没有负控制的判据」。
+    // 字段照线上原样：streetAddress（街道级，须删）/ addressRegion / postalCode /
+    // addressCountry / email / telephone（均须保留）。
+    $data[] = [
+        '@type'     => 'Person',
+        '@id'       => home_url('/') . '#person',
+        'name'      => '邝楚嘉 Chujia Kuang',
+        'email'     => 'chirca@example.test',
+        'telephone' => '+86-000-0000-0000',
+        'address'   => [
+            '@type'          => 'PostalAddress',
+            'streetAddress'  => '某区某街道某小区',
+            'addressRegion'  => '广东',
+            'postalCode'     => '552200',
+            'addressCountry' => '中国',
+        ],
+    ];
+    $data[] = ['@type' => 'WebSite', '@id' => home_url('/') . '#website'];
+    $data[] = ['@type' => 'WebPage', '@id' => home_url('/') . '#webpage'];
+    // ★ 负控制现场：一个**非地址**节点，其业务字段**恰好也叫** streetAddress。
+    //   过滤器的 @type 判据若写得太宽（无条件 unset 一切同名键），这一处会被误删
+    //   ⇒ 本项目要求每条判据配一条会报红的负控制，这条就是。
+    $data[] = [
+        '@type'          => 'Place',
+        '@id'            => home_url('/') . '#obs-site',
+        'name'           => '观测地',
+        'streetAddress'  => '业务字段，与邮政地址无关，不得删',
+    ];
+};
 foreach ($GLOBALS['kcj_hooks']['rank_math/json_ld'] as $h) {
     $prios[] = ['prio' => $h['prio'], 'args' => $h['args']];
+    // 站点级实体是否会被 Rank Math 补上（按其 L379 判据：本插件回调早于 10 点 ⇒ 非空即成立）
+    if (!$rm_injected && $h['prio'] >= 10) {
+        $globals_added = ! empty($data);
+        if ($globals_added) { $inject_globals($data); }
+        $rm_injected = true;
+    }
     $data = call_user_func($h['cb'], $data, null);
 }
 $data = array_filter((array) $data);
 
-// ★ 先留一份「本插件自己的产出」：下面的站点级实体是模拟 Rank Math 补的，
-//   两者混在一起就无法判定「某个 @type 到底是谁出的」——这是本工具的第一个自咬点。
-$plugin_data  = $data;
-$plugin_types = array_values(array_map(function ($n) { return isset($n['@type']) ? $n['@type'] : null; }, array_values($plugin_data)));
-
-// 站点级实体是否会被 Rank Math 补上（按 L379 的判据：本插件回调早于 10 点 ⇒ 非空即成立）
-$first_prio = $prios ? min(array_column($prios, 'prio')) : PHP_INT_MAX;
-$globals_added = ($first_prio < 10) && ! empty($data);
-if ($globals_added) {
-    $data[] = ['@type' => 'Person', '@id' => home_url('/') . '#person'];
-    $data[] = ['@type' => 'WebSite', '@id' => home_url('/') . '#website'];
-    $data[] = ['@type' => 'WebPage', '@id' => home_url('/') . '#webpage'];
+// ★ 留一份「本插件自己的产出」——站点级实体是模拟 Rank Math 补的，
+//   两者混在一起就无法判定「某个 @type 到底是谁出的」（本工具的第一个自咬点）。
+//   ⚠ 口径必须**保留旧语义**：本插件节点大多**没有 @id**（daily/event/collection 都是），
+//     故不能用「@id 含某串」来筛 —— 那样会把它们整批筛掉（本轮已踩，三条既有判据齐红）。
+//   ⇒ 拆成两条互不干扰的键：
+//      · plugin_types：本插件节点类型（在站点级实体注入后按「非站点级」排除法算）
+//      · asset_types ：专指首页两件学术资产（@id 含 `#asset-`）
+$plugin_types = [];
+$asset_types  = [];
+foreach (array_values($data) as $n) {
+    $id  = isset($n['@id']) ? (string) $n['@id'] : '';
+    $typ = isset($n['@type']) ? $n['@type'] : null;
+    if (strpos($id, '#asset-') !== false) { $asset_types[] = $typ; }
+    // 站点级实体的 @id 一律是 <站点根>#<固定片段> ⇒ 用片段名精确排除，不用前缀宽判。
+    if (!in_array($id, [
+        home_url('/') . '#person',
+        home_url('/') . '#website',
+        home_url('/') . '#webpage',
+        home_url('/') . '#obs-site',
+        home_url('/'),
+    ], true)) {
+        $plugin_types[] = $typ;
+    }
 }
+
+// ★ v2.3.18：把「地址相关键」的出现位置逐条导出 —— 判据只认这里，不认源码长相。
+//   为什么要在 harness 里算而不在 Python 里算：Python 侧只能拿到最终 JSON，
+//   分不清「哪个键在哪个节点里」与「是本来就无、还是被删了」。
+$street_hits = [];
+function kcj_stub_walk($v, $path) {
+    // ⚠ 写成普通递归函数而非 `use (&$walk)` 的闭包：闭包 by-ref 自引用在部分 PHP 版本上
+    //   会告警，且失败的模态是**静默少算** —— 判据宁可不依赖这种运气。
+    //   ⚠ 函数名单独起（kcj_stub_ 前缀）：桩里已有 kcj_ 前缀的函数，避免与插件重名。
+    if (!is_array($v)) { return; }
+    foreach ($v as $k => $child) {
+        if ($k === 'streetAddress') { $GLOBALS['kcj_street_hits'][] = $path; }
+        if (is_array($child)) { kcj_stub_walk($child, $path . '/' . (is_int($k) ? '[' . $k . ']' : $k)); }
+    }
+}
+$GLOBALS['kcj_street_hits'] = [];
+foreach (array_values($data) as $i => $n) { kcj_stub_walk($n, '#' . $i); }
+$street_hits = $GLOBALS['kcj_street_hits'];
 
 $out = [
     'case'            => $GLOBALS['kcj_case'],
@@ -495,8 +584,10 @@ $out = [
     'globals_added'   => $globals_added,
     'graph_empty'     => empty($data),
     'plugin_types'    => $plugin_types,
+    'asset_types'     => $asset_types,
     'graph'           => array_values($data),
     'types'           => array_values(array_map(function ($n) { return isset($n['@type']) ? $n['@type'] : null; }, array_values($data))),
+    'street_hits'     => $street_hits,
 ];
 echo json_encode($out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT), "\n";
 """
@@ -599,7 +690,8 @@ def main():
         cases = {}
         try:
             for c in ("event", "event_with_rankmath_meta", "historical", "collection",
-                      "daily", "daily_no_shortcode", "hub_page", "hub_page_today_off"):
+                      "daily", "daily_no_shortcode", "hub_page", "hub_page_today_off",
+                      "front"):
                 # ★ hub_page 的数据集日期取自 current_time('Y-m-d') ⇒ 必须钉住基准日，
                 #   否则断言「= 2026-09-23」会在跨日时假红（尤其是 00:00 前后）。
                 # ⚠ 第二次 run_case 只能写在**这个 try 块内** —— 桩在 finally 里就删了，
@@ -862,6 +954,122 @@ def main():
         hpo = cases["hub_page_today_off"]
         chk("负控制：[astro_hub today=\"0\"] 时不得声明 Dataset（该栏在页面上不存在）",
             not hpo["plugin_types"], "plugin_types=%s" % hpo["plugin_types"])
+
+        # ⑥-c ★ v2.3.17：首页两件学术资产的补字段（headline / image）
+        #     Google 富结果对这两节点报 5 条「未填写」，逐条核实后 **2 真 3 误报**。
+        #     本组判据只盯「真缺的两条」，不追那 3 条误报（不为消提示而加无意义字段）。
+        fr = cases["front"]
+        chk("★ 首页上下文命中（front 分支）", fr["context"] == "front", fr["context"])
+        _pa = types_of(fr["graph"], "ScholarlyArticle")
+        _ds = types_of(fr["graph"], "Dataset")
+        f1 = []
+        if len(_pa) != 1:
+            f1.append("预印本节点 %d 个（应为 1）" % len(_pa))
+        else:
+            a = _pa[0]
+            if not a.get("headline"):
+                f1.append("headline 未填（Article 家族必填项，填了 name 仍会报）")
+            if a.get("headline") != a.get("name"):
+                f1.append("headline %r ≠ name %r（按惯例须同值）" % (a.get("headline"), a.get("name")))
+            if not a.get("image"):
+                f1.append("image 未填")
+            # ★ 负控制：补字段**不得**动到既有字段 —— 一旦有人图省事整段重写，
+            #   这几个就会静默消失（本项目「整段覆盖」型改动翻过车，故逐项钉住）。
+            for k, v in (("license", "https://creativecommons.org/licenses/by/4.0/"),
+                         ("creativeWorkStatus", "Preprint"),
+                         ("sameAs", "https://doi.org/10.5281/zenodo.22803746")):
+                if a.get(k) != v:
+                    f1.append("既有字段 %s 被改动：%r（应为 %r）" % (k, a.get(k), v))
+            if (a.get("identifier") or {}).get("@type") != "PropertyValue":
+                f1.append("identifier 的 PropertyValue 形态被降级")
+            if (a.get("author") or {}).get("@type") != "Person":
+                f1.append("author 不是内联 Person")
+        if len(_ds) != 1:
+            f1.append("数据集节点 %d 个（应为 1）" % len(_ds))
+        else:
+            if not _ds[0].get("image"):
+                f1.append("数据集 image 未填")
+            for k, v in (("license", "https://creativecommons.org/licenses/by/4.0/"),
+                         ("version", "1.0.0")):
+                if _ds[0].get(k) != v:
+                    f1.append("数据集既有字段 %s 被改动：%r" % (k, _ds[0].get(k)))
+            if (len(_ds[0].get("description") or "") < 100):
+                f1.append("数据集 description 疑似被截短（%d 字）" % len(_ds[0].get("description") or ""))
+        chk("★★ 补 headline/image 两处，且既有字段一字未动", not f1, "; ".join(f1) or "逐项全对")
+
+        # ★ image 必须指向**真实存在的资源**，且两件**同一张**（与图内 #richSnippet 同源）。
+        #   ⚠ 反面教材：用户给的「满分代码」把 image 填成 `https://wp.com`（裸域、非图片）
+        #     —— 那会把「未填写」变成「填了但无效」。故判据里钉死「必须是图片扩展名」。
+        f2 = []
+        for nm, nodes in (("预印本", _pa), ("数据集", _ds)):
+            for n in nodes:
+                im = str(n.get("image", ""))
+                if not im:
+                    f2.append("%s image 为空" % nm)
+                elif not im.lower().split("?")[0].endswith((".jpg", ".jpeg", ".png", ".webp")):
+                    f2.append("%s image 不是图片路径：%r" % (nm, im))
+                elif "og-site-3.jpg" not in im:
+                    f2.append("%s image 与 #richSnippet 不同源：%r" % (nm, im))
+        chk("★ image 指向真实图片（非裸域占位）且两件同源", not f2, "; ".join(f2) or "两件同一张 OG 图")
+
+        # ⑦-b ★ v2.3.18：街道级地址必须从结构化数据里消失，其余一律保留。
+        f3 = []
+        _addr = None
+        for n in fr["graph"]:
+            if n.get("@type") == "Person" and "address" in n:
+                _addr = n["address"]
+                break
+        if _addr is None:
+            # ⚠ 这条文案要能区分两种成因（负控制实测时踩过一次）：
+            #   ① 桩没摆 #person ⇒ 判据失去观察面，是**测试自身**的问题；
+            #   ② 过滤器把整个 address 块删了（不止删 streetAddress）⇒ 是**代码**改坏了。
+            #   只说「找不到节点」会把 ① 与 ② 混成一句，看到的人没法判断该改哪边。
+            _has_person = [n for n in fr["graph"] if n.get("@type") == "Person"]
+            if not _has_person:
+                f3.append("桩里没有 Person 节点（判据失去观察面 —— 测试侧问题，非代码问题）")
+            else:
+                f3.append("Person 节点在、但 address 整体不见了：%r（只应删 streetAddress 一个键）"
+                          % (_has_person[0],))
+        else:
+            if "streetAddress" in _addr:
+                f3.append("streetAddress 仍在：%r" % _addr.get("streetAddress"))
+            for k, v in (("addressRegion", "广东"), ("postalCode", "552200"), ("addressCountry", "中国")):
+                if _addr.get(k) != v:
+                    f3.append("应保留的 %s 被删/改动：%r" % (k, _addr.get(k)))
+            if _addr.get("@type") != "PostalAddress":
+                f3.append("@type 被改：%r（只应去字段、不去节点类型）" % _addr.get("@type"))
+        # email / telephone 属「其它可以公开」⇒ 必须原样保留
+        for n in fr["graph"]:
+            if n.get("@type") == "Person" and "address" in n:
+                if not n.get("email"):
+                    f3.append("email 被删（用户口径：详细地址隐藏、其它可公开）")
+                if not n.get("telephone"):
+                    f3.append("telephone 被删（同上）")
+                break
+        chk("★★ 街道级地址已滤除、其余地址成分与联系方式原样保留",
+            not f3, "; ".join(f3) or "streetAddress 无、其余 4 项在")
+
+        # ★ 负控制（本项目铁律：一条没有负控制的判据等于恒真）
+        #   ① 过滤器若被整块撤掉 ⇒ streetAddress 必须**仍在**（证判据对缺陷敏感）
+        #   ② 同名但非地址的字段（Place.streetAddress）**不得**被误删
+        f4 = []
+        if len(fr.get("street_hits") or []) != 1:
+            f4.append("streetAddress 残留 %d 处（应为 1：仅 #obs-site 那处业务字段）%s"
+                      % (len(fr.get("street_hits") or []), fr.get("street_hits")))
+        else:
+            hit = fr["street_hits"][0]
+            if "obs-site" not in str(fr["graph"]):
+                pass
+            # 确认留下的是 Place 那个、不是 PostalAddress 那个
+            idx = hit.split("/")[0]
+            try:
+                node = fr["graph"][int(idx.lstrip("#"))]
+                if node.get("@type") != "Place":
+                    f4.append("残留处落在 %r 节点上（应落在 Place 业务字段）" % node.get("@type"))
+            except Exception as ex:
+                f4.append("回查残留位置失败：%r" % (ex,))
+        chk("★ 负控制：同名但非邮政地址的业务字段不得误删（Place.streetAddress 应留 1 处）",
+            not f4, "; ".join(f4) or "残留恰 1 处且落在 Place")
 
         # ⑧ 回退路径：Rank Math 未启用时，四类必须全由本插件出
         fb_ev = fallback["event"]

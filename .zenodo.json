@@ -22,7 +22,7 @@
   "license": "MIT",
   "access_right": "open",
   "language": "zho",
-  "version": "2.3.16",
+  "version": "2.3.18",
   "related_identifiers": [
     {
       "identifier": "https://github.com/Kuangchujia/astro-forecast",

@@ -3,7 +3,7 @@
  * Plugin Name:       嘉言一得天象历法（KuangChujia 天象预报模块）
  * Plugin URI:        https://kuangchujia.com/sky-forecast/
  * Description:        天象预报模块（今日天象 / 未来预告 / 历史回推）。后端预计算 + 静态/半静态渲染；短代码 [astro_today] [astro_forecast_list] [astro_related_events] [astro_history_today] [astro_forecast_report]；CPT astro_event + 分类法 event_type；REST 导入端点（WordPress.com 不开放外部 MySQL，须经此入库）。数据表 wp_astro_daily / wp_astro_events / wp_astro_relations / wp_astro_daily_site 激活时自动建。
- * Version:           2.3.16
+ * Version:           2.3.18
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            作者：「嘉言一得（邝楚嘉）」Author: Chujia Kuang
@@ -665,7 +665,52 @@ if (!defined('ABSPATH')) {
     exit; // 禁止直接访问
 }
 
-define('KCJ_ASTRO_VER', '2.3.16');
+define('KCJ_ASTRO_VER', '2.3.18');
+
+// ── v2.3.18（结构化数据地址过滤版，2026-09-25）变更摘要 ──────────────
+//   背景：用户令两条 —— ①「详细地址隐藏，其它可以公开」；② 顺着 v2.3.17 一并复核。
+//         实测首页 HTML 里 `chirca@163.com` / `13686060568` / `streetAddress` 各出现 1 次，
+//         来源是 **Rank Math 的「个人／知识图谱」设置**（本插件源码里一个字都没有），
+//         由 Rank Math 输出到站点 `@graph` 的 `#person` 节点；
+//         受影响页面＝首页 / About / Papers 中文 / 天文典籍 **各 1 处**（文章页 0 处）。
+//   修法：新增 `add_filter('rank_math/json_ld', …, 99)` ＋ 递归函数
+//         `kcj_astro_schema_strip_street(&$v)`，只删 `streetAddress` 一个键。
+//         · `addressRegion`（广东）/ `postalCode` / `addressCountry`（中国）**原样保留**；
+//         · `email` / `telephone` **原样保留**（用户口径：「其它可以公开」）；
+//         · `@type` 保留 —— 只去字段，不去节点类型。
+//         · 用**递归**而非定点改键：`@graph` 结构随版本与页面类型变化
+//           （首页 8 节点、非首页 6 节点），定点路径会在下次升级时静默失效。
+//         · 判据写严，避免误删同名业务字段：仅当该层 `@type === 'PostalAddress'`，
+//           或「有 streetAddress 且无 @type」时才删。
+//   ⚠ 性质：这是**输出层过滤**，不改 Rank Math 的存储值 —— 后台设置里那个地址还在。
+//     若要从根上删除，须去 Rank Math 后台设置（REST 读写不到该设置）。
+//   ⚠ 本过滤器只对 **Rank Math 的输出**生效；若日后本插件自己也输出地址，须另行处理。
+//   判据：php_selftest.py 新增 `front` 用例（首页上下文）＋ 4 条断言，
+//         全套 48 → **54** 项；并做**四条负控制** —— 撤掉过滤器 / 过滤器改宽
+//         （无条件删同名键）/ 撤掉 headline / image 填裸域，**四条全部按预期报红**。
+//         ⚠ 顺带修桩一处：站点级实体的**注入时机**原先在全部回调跑完之后，
+//           而现实中它们由 Rank Math 挂在**优先级 10** 塞进同一个 $data、塞完还要过 99 的过滤器。
+//           桩摆错时序 ⇒ 过滤器看不到 #person ⇒ 判据必然假红。
+//   无表结构变更、无新表 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**，升级**无需重新激活**。
+
+// ── v2.3.17（结构化数据补字段版，2026-09-25）变更摘要 ──────────────
+//   背景：Google 富结果对首页 @graph 里两件学术资产报「未填写 image / headline / author」
+//         共 5 条非严重提示。逐条核线上原文后定谳：
+//           **真缺 2 条** —— 预印本缺 headline（Article 家族另有此必填项，填了 name 仍会报）、
+//                            两件资产皆缺 image；
+//           **误报 3 条** —— 预印本 author 实为 Person 且已填；Dataset 用 creator，
+//                            author / headline 本就不适用（那是 Article 家族的规则）。
+//   修法：只在 `includes/rankmath.php` 的 kcj_astro_schema_front_assets() 内补两处：
+//         ① 预印本节点补 `headline`（与 name 同值）；
+//         ② 两件资产补 `image`，取站点**既有且真实可访问**的 OG 图
+//            （https://i0.wp.com/kuangchujia.com/wp-content/uploads/2026/09/og-site-3.jpg?fit=1200%2C630&ssl=1
+//             —— 与本图内 #richSnippet 节点同源，不新引外部资源）。
+//         **其余字段一字未动**：license / abstract / creativeWorkStatus / identifier 的
+//         PropertyValue 形态 / url 指 DOI 落地页 / publisher 指 Zenodo —— 全部保持原状。
+//   ⚠ 刻意的取舍：3 条误报提示**不予消除**。不为消提示而给 Dataset 强塞 author、
+//     也不给两件资产填占位 URL —— 那会把「未填写」变成「填了但无效」，评分可能更低。
+//   表结构未变 ⇒ KCJ_ASTRO_SCHEMA 仍为 4，升级**无需重新激活**。
+
 // ── v2.3.16（导航栏目修复版，2026-09-25）变更摘要 ────────────────
 //   背景：全站导航栏消失。定谳＝Seedlet 主题以 has_nav_menu('primary') 为唯一开关决定
 //         是否渲染 <nav>；菜单 Primary(id 1359) 的 11 项完好，丢的是「挂到哪个位置」的分配记录。
