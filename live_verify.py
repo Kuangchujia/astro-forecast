@@ -390,7 +390,7 @@ def check_archive(base, rep, path):
 
 def main():
     ap = argparse.ArgumentParser(description="线上验收：只看线上产物，不看本机文件")
-    ap.add_argument("--base", default="", help="WordPress 站点地址，如 https://example.com")
+    ap.add_argument("--base", default="https://kuangchujia.com")
     ap.add_argument("--rest-base", default="astro_event", help="事件 CPT 的 REST base")
     ap.add_argument("--expect-version", default="1.3.0")
     ap.add_argument("--archive", default="/sky-forecast/", help="事件归档页路径")
