@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+message: "If you use this software or the data it produces in your research, please cite it as below."
+type: software
+title: "astro-forecast: A high-precision astronomical forecasting and calendar factual archive"
+abstract: >-
+  An open-source toolchain that separates astronomical computation from page
+  rendering, built for publishing traditional Chinese calendrical and
+  astronomical content on WordPress over the long term. The compute kernel is
+  based on Skyfield and the JPL DE421 ephemeris and derives solar-term instants,
+  eclipses, planetary conjunctions/oppositions/stationary points, greatest
+  elongations, lunar phase and age, meteor-shower maxima, and sunrise/sunset with
+  twilight. All values are computed offline and delivered to a WordPress site in
+  batches over a REST endpoint; the front end performs no live computation. The
+  plugin ships eight shortcodes and eight templates covering today's sky, upcoming
+  events, this day in history, observing locations, and report download.
+  Code is MIT-licensed; data and documentation inside the repository
+  (samples/, data/, docs/, README*.md) are CC BY 4.0. The ephemeris file
+  de421.bsp is not redistributed here; its rights belong to JPL / NASA.
+authors:
+  - family-names: "Kuang"
+    given-names: "Chujia"
+    alias: "邝楚嘉"
+    orcid: "https://orcid.org/0009-0002-7650-833X"
+version: "2.3.7"
+doi: "10.5281/zenodo.22950008"
+date-released: "2026-09-25"
+url: "https://kuangchujia.com"
+repository-code: "https://github.com/Kuangchujia/astro-forecast"
+license: "MIT"
+keywords:
+  - "astronomy"
+  - "ephemeris"
+  - "chinese-calendar"
+  - "solar terms"
+  - "skyfield"
+  - "de421"
+  - "wordpress plugin"
+  - "中国传统历法"
+  - "天文历算"
