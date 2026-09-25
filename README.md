@@ -14,6 +14,10 @@
 - **发布面**：八个短代码、八个模板，覆盖「今日天象 / 未来预告 / 历史上今日 / 观测地 / 报告下载」。
 - **验证面**：六道校验闸门（含 PHP 语法闸与 WordPress 钩子桩测试），本机离线可跑。
 
+<!-- badges -->
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22950008.svg)](https://doi.org/10.5281/zenodo.22950008) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Data: CC BY 4.0](https://img.shields.io/badge/Data-CC%20BY%204.0-lightgrey.svg)](LICENSE-DATA) [![ORCID](https://img.shields.io/badge/ORCID-0009--0002--7650--833X-a6ce39.svg)](https://orcid.org/0009-0002-7650-833X) [![Site](https://img.shields.io/badge/site-kuangchujia.com-blue.svg)](https://kuangchujia.com)
+
+
 ---
 
 ## 一、它解决什么问题
