@@ -1,0 +1,44 @@
+{
+  "title": "astro-forecast: 中国古天文历法离线预计算引擎与 WordPress 发布插件",
+  "upload_type": "software",
+  "description": "<p>astro-forecast 是一套把「天文量计算」与「页面渲染」彻底切开的开源工具链，用于在 WordPress 上长期稳定地发布中国传统天文历法内容。计算内核基于 Skyfield 与 JPL DE421 星历，可算二十四节气交节时刻、日月食、行星合冲留逆、大距、月相月龄、流星雨极大、日出日落与晨昏蒙影；所有天文量在本地算完后经 REST 端点批量入库，前端零实时计算。数据面为四张自定义数据表（日 / 事件 / 关联 / 日×城），带字段白名单与复合判重键。发布面提供八个短代码与八个模板，覆盖今日天象、未来预告、历史上今日、观测地、报告下载。验证面含六道校验闸门，含 PHP 语法闸与 WordPress 钩子桩测试，本机离线可跑。</p><p>代码采用 MIT 许可；仓库内代码以外的数据与文档（samples/、data/、docs/、README*.md）采用 CC BY 4.0。星历文件 de421.bsp 不在仓库内分发，其权利属 JPL / NASA。</p><p><strong>Project home.</strong> Source code: <a href=\"https://github.com/Kuangchujia/astro-forecast\">github.com/Kuangchujia/astro-forecast</a>. Author site: <a href=\"https://kuangchujia.com/\">kuangchujia.com</a>. Companion dataset: <a href=\"https://doi.org/10.5281/zenodo.22788686\">10.5281/zenodo.22788686</a> (code for the calendrical data tables).</p>",
+  "creators": [
+    {
+      "name": "邝楚嘉",
+      "orcid": "0009-0002-7650-833X"
+    }
+  ],
+  "keywords": [
+    "astronomy",
+    "ephemeris",
+    "chinese-calendar",
+    "solar terms",
+    "skyfield",
+    "de421",
+    "wordpress plugin",
+    "中国传统历法",
+    "天文历算"
+  ],
+  "license": "MIT",
+  "access_right": "open",
+  "language": "zho",
+  "version": "2.3.7",
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/Kuangchujia/astro-forecast",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://kuangchujia.com/",
+      "relation": "isDocumentedBy",
+      "scheme": "url"
+    },
+    {
+      "identifier": "10.5281/zenodo.22788686",
+      "relation": "isSupplementTo",
+      "scheme": "doi"
+    }
+  ],
+  "notes": "astro-forecast 为开源软件，代码 MIT、数据与文档 CC BY 4.0。作者：邝楚嘉（Chujia Kuang）。"
+}
