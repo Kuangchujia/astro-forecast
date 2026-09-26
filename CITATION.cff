@@ -22,7 +22,7 @@ authors:
     alias: "邝楚嘉"
     orcid: "https://orcid.org/0009-0002-7650-833X"
 version: "2.3.7"
-doi: "10.5281/zenodo.22950008"
+doi: "10.5281/zenodo.22950007"
 date-released: "2026-09-25"
 url: "https://kuangchujia.com"
 repository-code: "https://github.com/Kuangchujia/astro-forecast"
