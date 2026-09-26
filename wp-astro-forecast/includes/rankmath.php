@@ -389,6 +389,260 @@ function kcj_astro_schema_front_assets($which = array()) {
     return $out;
 }
 
+/* ==================================================================
+ * ★ v2.3.20（2026-09-26）：为**「术语表」与「历法改革」栏目页**补 TechArticle。
+ *
+ * 用户诉求（原稿）：
+ *   在 Glossary / Calendar Reform 单页注入 `TechArticle` JSON-LD，字段含
+ *   `name` / `headline` / `inLanguage` / `author` / `about` / `educationalLevel` / `license`。
+ *
+ * 为什么由本插件补，而不是在编辑器里手贴一段 <script>：
+ *   ① 手贴会在 Rank Math 的 `@graph` **之外**产生第二份 `@context`，
+ *      `@id` 与图内 `#person` / `#website` **无关联** ⇒ 机器读到两个互不相认的世界；
+ *      本插件走 `rank_math/json_ld` 过滤器（优先级 5），节点**并进同一个 @graph**，
+ *      `@id` 复用图内既有 `#person` / `#website`，**不悬空**。
+ *   ② 手贴是页面内容的一部分，改版/迁移会丢；本插件是**版本化交付物**，可回溯可回滚。
+ *   ③ Rank Math 免费版的类型清单里没有 TechArticle
+ *      （同 ScholarlyArticle 的处境，见本文件头 L11—L14），
+ *      该类页面它只会发泛类 Article ⇒ **不存在重复输出的风险**。
+ *
+ * ★ 判据用 **slug 白名单**，不靠标题文案：
+ *   标题是可改的文案（「术语表」可能改成「术语索引」），slug 是稳定标识。
+ *   ⚠ 只认**本专栏自己的** slug，不做「按内容含术语表就发」的宽判 ——
+ *     宽判会在别的页面误发（= 为不可见内容声明结构化数据，违反本文件头硬约束）。
+ * ================================================================== */
+
+/**
+ * 适用 TechArticle 的页面 slug 白名单。
+ *
+ * 布局（线上实测 2026-09-25）：
+ *   · `/glossary/`(75)      ＋ `/glossary/zh/`(590) ＋ `/glossary/en/`(589)
+ *   · `/calendar-reform/`(74) ＋ `/calendar-reform/zh/`(587) ＋ `/calendar-reform/en/`(595)
+ * 父页是「双语 Tab 单页」（同一 URL 内两面板），子页是各语言独立页
+ * ⇒ **六页都是「渲染了术语表 / 历法改革正文」的页面**，六页都发。
+ *
+ * ★ 为什么父页也发（而不是只发语言子页）：
+ *   父页把两面内容都渲染进了 HTML（Tab 是 CSS 切换，不是 JS 按需取数，
+ *   同 F62 的 `[astro_hub]` 那次教训）⇒ 页面**确实有**该内容，声明它不算失真。
+ *
+ * ⚠ 白名单只放**顶层栏目 slug**（glossary / calendar-reform）与**语言子页** ——
+ *   语言子页在主列表里不需要，因为它的**父**命中即算命中（见下方判据）；
+ *   这里显式列出只为「万一将来子页被提到顶层」时仍稳。
+ *
+ * @return array<string> slug 列表
+ */
+function kcj_astro_tech_article_slugs() {
+    return array('glossary', 'calendar-reform');
+}
+
+/**
+ * 当前请求是否为「技术说明文栏目」页面。
+ *
+ * 判据（三条，全部成立才为真）：
+ *   ① `is_page()` —— 只认 page，不认 post / CPT / 归档；
+ *   ② 本页 slug ∈ 白名单，**或**其父页 slug ∈ 白名单（覆盖 /glossary/zh/ 这类子页）；
+ *   ③ `get_queried_object_id()` 能取到 —— 取不到说明不是单页请求。
+ *
+ * ★ 为什么用「父页 slug」而不是「is_page_template / body_class」：
+ *   本项目已实测本站 322 个 page 的 `template` 字段**全为空串**、`/wp/v2/templates` 404
+ *   ⇒ 免费版**没有可依赖的模板标识**。父页 slug 是唯一稳且可读的锚。
+ *
+ * @return bool
+ */
+function kcj_astro_is_tech_article_page() {
+    if (!function_exists('is_page') || !is_page()) {
+        return false;
+    }
+    $pid = (int) get_queried_object_id();
+    if ($pid <= 0) {
+        return false;
+    }
+    $slugs = kcj_astro_tech_article_slugs();
+
+    // ②-a 自身 slug 命中
+    $self_slug = (string) get_post_field('post_name', $pid);
+    if (in_array($self_slug, $slugs, true)) {
+        return true;
+    }
+
+    // ②-b 父页 slug 命中（语言子页 /glossary/zh/、/calendar-reform/en/ …）
+    $parent = (int) get_post_field('post_parent', $pid);
+    if ($parent > 0) {
+        $p_slug = (string) get_post_field('post_name', $parent);
+        if (in_array($p_slug, $slugs, true)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * 技术说明文节点：TechArticle。
+ *
+ * @param array $p payload：title / excerpt / url / published / modified /
+ *                          image / lang / words / about
+ * @return array 单节点数组（包成 list）
+ */
+function kcj_astro_schema_tech_article($p) {
+    $home = home_url('/');
+    $who  = array(
+        '@type' => 'Person',
+        '@id'   => $home . '#person',              // 与图内 #person 同 id（不悬空）
+        'name'  => '邝楚嘉 Chujia Kuang',
+        'url'   => $home,
+    );
+    $pub  = array(
+        '@type' => 'Organization',
+        '@id'   => $home . '#website',             // 与图内 WebSite 同 id
+        'name'  => '邝楚嘉 Chujia Kuang — Chinese Calendrics & Solar Terms',
+        'url'   => $home,
+    );
+
+    $node = array(
+        // ★ TechArticle 与 BlogPosting 是兄弟（同属 Article 家族），
+        //   语义差别：本文是**技术说明/参考条目**，不是带发布节律的博文。
+        '@type'               => 'TechArticle',
+        // ★ @id 用「网址 + #techarticle」：稳定可引，且与 Rank Math 的
+        //   `#webpage` / `#person` / `#website` 命名空间**不冲突**。
+        '@id'                 => $p['url'] . '#techarticle',
+        'headline'            => $p['title'],
+        'name'                => $p['title'],
+        'description'         => $p['excerpt'],
+        'image'               => $p['image'],
+        'inLanguage'          => $p['lang'],
+        'datePublished'       => $p['published'],
+        'dateModified'        => $p['modified'],
+        'author'              => $who,
+        'publisher'           => $pub,
+        'mainEntityOfPage'    => array('@type' => 'WebPage', '@id' => $p['url']),
+        'url'                 => $p['url'],
+        'wordCount'           => (int) $p['words'],
+        // ★ 用户原稿要的三个学术向字段
+        'about'               => $p['about'],      // 主题：Thing 列表
+        'educationalLevel'    => 'Academic',       // 学术层级：面向研究者/从业者
+        'license'             => 'https://creativecommons.org/licenses/by/4.0/',
+        'isAccessibleForFree' => true,
+    );
+    return array($node);
+}
+
+/* ==================================================================
+ * ★ v2.3.19（2026-09-26）：为**文章页（post 单篇）**补 Article 结构化数据。
+ *
+ * 背景（线上实测，2026-09-25）：
+ *   · `page` 类 60/60 全有 `rank-math-schema`；
+ *   · `post` 类 **22/23 缺失**（唯一"有"的那条其实是 /all-posts/ 的别名）。
+ *   逐字比对 `<head>` 确认：post 页 Rank Math 段**在 twitter 卡之后直接闭合**
+ *   （`<!-- /Rank Math WordPress SEO plugin -->`），**中间没有 schema 那一段** ——
+ *   而 page 页同一位置紧跟 `<script class="rank-math-schema">`。
+ *   ⇒ 不是插件没装、也不是本插件冲突，而是**这一类的 schema 输出没开**。
+ *
+ * 为什么由本插件补，而不是去改后台：
+ *   ① 后台开关是**站主可改的状态**，改它＝让站点的机器可读性依赖一个界面设置；
+ *   ② 本插件已有 `rank_math/json_ld` 过滤器（优先级 5，见上），**补节点是既有能力**；
+ *   ③ 本插件是**版本化交付物**，改动可回溯、可回滚、可进 OSS 仓；后台设置不具这些性质。
+ *
+ * ★ 为什么不担心「与 Rank Math 双份」（最关键的设计）：
+ *   判据**不看后台开关**（那会随设置漂移），而看**本次请求里 Rank Math 到底输出了没有** ——
+ *   用它在同一 filter 上先跑（优先级 10）留下的痕迹判定。若它已输出文章级实体，
+ *   本函数**立即让位**，一个节点都不加。⇒ 后台哪天打开了，自动切换，绝不双份。
+ * ================================================================== */
+
+/**
+ * Rank Math 是否已为**本次请求的 post** 输出了文章级结构化数据。
+ *
+ * 判据分两层，取"或"：
+ *   ① 文章元数据里有 `rank_math_schema_*`（Rank Math 的文章级 schema 存储约定，
+ *      见 includes/modules/schema/class-db.php :: get_schemas()）—— 这是**持久层**证据；
+ *   ② 本 filter 收到的 `$data` 里**已经存在** Article 家族节点 —— 这是**输出层**证据。
+ *
+ * ★ 为什么必须两层都留：① 覆盖"用户手动配了 schema"的情形（此时输出层可能还没跑），
+ *   ② 覆盖"类级别的默认 schema 生效但没写文章元数据"的情形（此时持久层为空）。
+ *   只留①会在类级默认开启时误判为"没输出"⇒ 双份；只留②会在优先级顺序变化时误判。
+ *
+ * @param array $data 当前 @graph 数组（filter 收到的）
+ * @return bool
+ */
+function kcj_astro_rankmath_emits_article_schema($data = array()) {
+    // ① 持久层：文章级 schema 元数据
+    if (function_exists('kcj_astro_rankmath_has_post_schema')
+        && kcj_astro_rankmath_has_post_schema()) {
+        return true;
+    }
+    // ② 输出层：@graph 里已有 Article 家族节点
+    if (is_array($data)) {
+        $family = array('Article', 'NewsArticle', 'BlogPosting', 'ScholarlyArticle',
+                        'TechArticle', 'Report', 'LiveBlogPosting');
+        foreach ($data as $node) {
+            if (!is_array($node) || empty($node['@type'])) {
+                continue;
+            }
+            $t = $node['@type'];
+            foreach ((array) $t as $one) {
+                // 形如 ["Article","Thing"] 的数组型 @type 也要认出
+                if (in_array($one, $family, true)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * 文章页节点：BlogPosting（Google 的 Article 家族里最贴"博客长文"的一支）。
+ *
+ * ★ 为什么用 BlogPosting 而非 Article：
+ *   Google 支持 Article 家族三类（Article / NewsArticle / BlogPosting）。
+ *   本站文章是**署名长文**、有发布日期与作者，BlogPosting 语义最贴；
+ *   且它与 Article 是**子类关系**，校验器按 Article 规则检查，要求一致。
+ *
+ * ⚠ 硬约束（照本文件头）：
+ *   · 不得出现占星/运势/吉凶字段；
+ *   · **不得为不可见内容声明结构化数据** ⇒ 正文过短的页面不发节点（判据见 payload）。
+ *   · 图片必须是**真实可访问**的资源 —— 取站点既有 OG 图，不引外部占位。
+ *
+ * @param array $p payload：post_id / title / excerpt / url / published / modified /
+ *                       image / lang / words
+ * @return array 单节点数组（包成 list）
+ */
+function kcj_astro_schema_article($p) {
+    $home = home_url('/');
+    $who  = array(
+        '@type' => 'Person',
+        '@id'   => $home . '#person',              // 与图内 #person 同 id（不悬空）
+        'name'  => '邝楚嘉 Chujia Kuang',
+        'url'   => $home,
+    );
+    $pub  = array(
+        '@type' => 'Organization',
+        '@id'   => $home . '#website',             // 与图内 WebSite 同 id
+        'name'  => '邝楚嘉 Chujia Kuang — Chinese Calendrics & Solar Terms',
+        'url'   => $home,
+    );
+
+    $node = array(
+        '@type'            => 'BlogPosting',
+        // ★ @id 用「网址 + #article」：稳定、可被别的节点引用、且与 Rank Math 的
+        //   `#webpage` / `#person` / `#website` 命名空间**不冲突**。
+        '@id'              => $p['url'] . '#article',
+        'headline'         => $p['title'],
+        'name'             => $p['title'],
+        'description'      => $p['excerpt'],
+        'image'            => $p['image'],
+        'inLanguage'       => $p['lang'],
+        'datePublished'    => $p['published'],
+        'dateModified'     => $p['modified'],
+        'author'           => $who,
+        'publisher'        => $pub,
+        'mainEntityOfPage' => array('@type' => 'WebPage', '@id' => $p['url']),
+        'url'              => $p['url'],
+        'wordCount'        => (int) $p['words'],
+        'isAccessibleForFree' => true,
+    );
+    return array($node);
+}
+
 /* --------------------------- 输出 --------------------------- */
 
 /** 供模板调用：给定上下文与数据，返回应输出的节点数组 */
@@ -426,6 +680,21 @@ function kcj_astro_schema_nodes($context, $payload = array()) {
                 return array();
             }
             return kcj_astro_schema_front_assets($payload['assets']);
+        case 'article':
+            // ★ v2.3.19：文章页 BlogPosting。
+            //   payload 里带 `skip` ⇒ Rank Math 已在输出（或内容过短）⇒ 不发。
+            //   这两条判据都在 payload 里算，**保持 nodes() 为纯函数**（无副作用、好测）。
+            if (empty($payload['article']) || !empty($payload['skip'])) {
+                return array();
+            }
+            return kcj_astro_schema_article($payload['article']);
+        case 'tech':
+            // ★ v2.3.20：技术说明文栏目页 TechArticle。
+            //   与 article 分支同样的形态：判据全在 payload 里算，nodes() 保持纯函数。
+            if (empty($payload['tech']) || !empty($payload['skip'])) {
+                return array();
+            }
+            return kcj_astro_schema_tech_article($payload['tech']);
     }
     return array();
 }
@@ -557,6 +826,25 @@ function kcj_astro_schema_context() {
     if (function_exists('is_front_page') && is_front_page()) {
         return 'front';
     }
+    // ★ v2.3.19（2026-09-26）：**文章页（post 单篇）**单列一类。
+    //   线上实测该类 22/23 无 schema（诊断见 kcj_astro_rankmath_emits_article_schema 上方）。
+    //   ⚠ 顺序：必须排在 front 之后 —— 首页是一个 page，不会被 is_singular('post') 命中，
+    //     但把 front 放前面可读性更好、且防「将来首页改成 post 形态」的意外。
+    //   ⚠ 判据用 is_singular('post')：**不含** page（page 类 Rank Math 已在输出，
+    //     本插件不该去补，补了就是双份）。
+    if (function_exists('is_singular') && is_singular('post')) {
+        return 'article';
+    }
+    // ★ v2.3.20（2026-09-26）：**技术说明文栏目页**（术语表 / 历法改革）。
+    //   这两栏的内容是**参考性技术条目**，不是带发布节律的博文 ⇒ 发 TechArticle。
+    //   ⚠ 顺序：必须排在 `article`（is_singular('post')）之后 ——
+    //     `is_singular('post')` 对 page 恒 false，两者本不重叠；放后面只是为了
+    //     让「越专用的判据越靠前」这条既有可读性规则保持一致。
+    //   ⚠ 判据见 kcj_astro_is_tech_article_page()：slug 白名单 ＋ 父页 slug，
+    //     **不含**任何按正文内容宽判的做法。
+    if (kcj_astro_is_tech_article_page()) {
+        return 'tech';
+    }
     return 'daily';
 }
 
@@ -631,6 +919,160 @@ function kcj_astro_schema_payload() {
             return array();
         }
         return array('assets' => array('paper' => $has_paper, 'dataset' => $has_data));
+    }
+
+    // ★ v2.3.19：文章页。判据三条，任一不满足即 `skip = true`（不发节点）：
+    //   ① Rank Math 本次已经输出了文章级 schema ⇒ 让位（防双份，**最重要的那条**）；
+    //   ② 正文净字 < 阈值 ⇒ 守「不可见不声明」（短讯/占位页不值得声明为文章）；
+    //   ③ 拿不到标题或永久链接 ⇒ 宁缺勿造。
+    //   ⚠ 阈值 120 字：本站最短的正式文章也远超此数（实测最短 1,400+ 字），
+    //     设 120 只为挡住「空壳页 / 占位页」，不是内容判定线。
+    if ($ctx === 'article') {
+        $post_id = get_the_ID();
+        if (!$post_id) {
+            return array('skip' => true);
+        }
+        $raw  = (string) get_post_field('post_content', $post_id);
+        $text = trim(wp_strip_all_tags(strip_shortcodes($raw)));
+        // 去掉空白后数**字符**（中文按字算；纯英文文章会偏严，故阈值取低）
+        $chars = function_exists('mb_strlen')
+            ? mb_strlen(preg_replace('/\s+/u', '', $text), 'UTF-8')
+            : strlen(preg_replace('/\s+/', '', $text));
+        if ($chars < 120) {
+            return array('skip' => true);
+        }
+        $url   = get_permalink($post_id);
+        $title = get_the_title($post_id);
+        if (!$url || !$title) {
+            return array('skip' => true);
+        }
+        // 摘要：优先手填 excerpt，否则从正文截。截到 55 字内并补省略号 ——
+        // ★ 与 og:description 的形态一致（Rank Math 也是取 excerpt）。
+        $excerpt = (string) get_post_field('post_excerpt', $post_id);
+        if ($excerpt === '') {
+            $excerpt = $text;
+        }
+        $excerpt = trim(preg_replace('/\s+/u', ' ', $excerpt));
+        if (function_exists('mb_substr') && mb_strlen($excerpt, 'UTF-8') > 60) {
+            $excerpt = mb_substr($excerpt, 0, 60, 'UTF-8') . '…';
+        }
+        // 语言：与站点 og:locale 同源，避免自造
+        $lang = (strpos((string) get_bloginfo('language'), 'zh') === 0) ? 'zh-Hans' : 'en';
+        // 图片：取站点既有 OG 图（与首页两件资产**同一张**，不新引外部资源）。
+        // ⚠ 硬约束：必须是真实可访问的资源 —— 不得填占位域。
+        $og = 'https://i0.wp.com/kuangchujia.com/wp-content/uploads/2026/09/og-site-3.jpg?fit=1200%2C630&ssl=1';
+        $img = get_the_post_thumbnail_url($post_id, 'full');
+        if (!$img) {
+            $img = $og;
+        }
+        return array(
+            'skip'    => kcj_astro_rankmath_emits_article_schema(),
+            'article' => array(
+                'title'     => (string) $title,
+                'excerpt'   => $excerpt,
+                'url'       => (string) $url,
+                'published' => get_post_time('c', true, $post_id),
+                'modified'  => get_post_modified_time('c', true, $post_id),
+                'image'     => $img,
+                'lang'      => $lang,
+                'words'     => $chars,
+            ),
+        );
+    }
+
+    // ★ v2.3.20：技术说明文栏目页（术语表 / 历法改革）。判据四条，任一不满足即
+    //   `skip = true`（不发节点）：
+    //   ① Rank Math 本次已经输出了 Article 家族节点 ⇒ 让位（防双份，最重要那条）；
+    //   ② 正文净字 < 阈值 ⇒ 守「不可见不声明」；
+    //   ③ 拿不到标题或永久链接 ⇒ 宁缺勿造；
+    //   ④ slug 推不出 `about` 主题 ⇒ 仍照发，但 `about` 退化为站点主题（不硬编无关词）。
+    //   ⚠ 阈值 80 字：本类页面是**参考条目**，正文以术语列表/表格为主，净字统计会
+    //     被表格与短句稀释，故比文章页的 120 更低；它只挡「空壳页」，不是内容判定线。
+    if ($ctx === 'tech') {
+        $post_id = get_the_ID();
+        if (!$post_id) {
+            return array('skip' => true);
+        }
+        $raw  = (string) get_post_field('post_content', $post_id);
+        $text = trim(wp_strip_all_tags(strip_shortcodes($raw)));
+        $chars = function_exists('mb_strlen')
+            ? mb_strlen(preg_replace('/\s+/u', '', $text), 'UTF-8')
+            : strlen(preg_replace('/\s+/', '', $text));
+        if ($chars < 80) {
+            return array('skip' => true);
+        }
+        $url   = get_permalink($post_id);
+        $title = get_the_title($post_id);
+        if (!$url || !$title) {
+            return array('skip' => true);
+        }
+        // 摘要：优先手填 excerpt，否则从正文截 60 字并补省略号（与文章页同形态）。
+        $excerpt = (string) get_post_field('post_excerpt', $post_id);
+        if ($excerpt === '') {
+            $excerpt = $text;
+        }
+        $excerpt = trim(preg_replace('/\s+/u', ' ', $excerpt));
+        if (function_exists('mb_substr') && mb_strlen($excerpt, 'UTF-8') > 60) {
+            $excerpt = mb_substr($excerpt, 0, 60, 'UTF-8') . '…';
+        }
+        // 语言：与站点 og:locale 同源。语言子页 slug 为 en 时按英文报，避免
+        // 「英文页声明 zh-Hans」的反向失真。
+        $self_slug = (string) get_post_field('post_name', $post_id);
+        $is_en     = ($self_slug === 'en');
+        $lang      = $is_en ? 'en' : 'zh-Hans';
+        // 图片：取站点既有 OG 图（与首页两件资产、文章页**同一张**，不新引外部资源）。
+        // ⚠ 硬约束：必须是真实可访问的资源 —— 不得填占位域。
+        $og = 'https://i0.wp.com/kuangchujia.com/wp-content/uploads/2026/09/og-site-3.jpg?fit=1200%2C630&ssl=1';
+        $img = get_the_post_thumbnail_url($post_id, 'full');
+        if (!$img) {
+            $img = $og;
+        }
+        // about：按**父页 slug**（栏目本体）推主题，不按当前页 slug 推 ——
+        //   语言子页 slug 是 zh/en，推不出主题。父页命中不了时退化为站点主题。
+        $anchor_slug = $self_slug;
+        $parent = (int) get_post_field('post_parent', $post_id);
+        if ($parent > 0) {
+            $p_slug = (string) get_post_field('post_name', $parent);
+            if (in_array($p_slug, kcj_astro_tech_article_slugs(), true)) {
+                $anchor_slug = $p_slug;
+            }
+        }
+        $about = array();
+        if ($anchor_slug === 'glossary' && !$is_en) {
+            $about = array(
+                array('@type' => 'Thing', 'name' => '中国天文历法术语'),
+                array('@type' => 'Thing', 'name' => '干支与二十四节气'),
+            );
+        } elseif ($anchor_slug === 'glossary') {
+            $about = array(
+                array('@type' => 'Thing', 'name' => 'Chinese calendrical terminology'),
+                array('@type' => 'Thing', 'name' => 'Heavenly stems, earthly branches and solar terms'),
+            );
+        } elseif (!$is_en) {
+            $about = array(
+                array('@type' => 'Thing', 'name' => '中国历法改革'),
+                array('@type' => 'Thing', 'name' => '阴阳合历与换岁节点'),
+            );
+        } else {
+            $about = array(
+                array('@type' => 'Thing', 'name' => 'Chinese calendar reform'),
+                array('@type' => 'Thing', 'name' => 'Lunisolar calendar and year-boundary rules'),
+            );
+        }
+        return array(
+            'skip' => kcj_astro_rankmath_emits_article_schema(),
+            'tech' => array(
+                'title'     => (string) $title,
+                'excerpt'   => $excerpt,
+                'url'       => (string) $url,
+                'published' => get_post_time('c', true, $post_id),
+                'modified'  => get_post_modified_time('c', true, $post_id),
+                'image'     => $img,
+                'lang'      => $lang,
+                'words'     => $chars,
+                'about'     => $about,
+            ),
+        );
     }
 
     if ($ctx === 'collection') {

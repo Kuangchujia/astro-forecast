@@ -50,7 +50,7 @@ add_action('wp_enqueue_scripts', function () {
 
 /** 默认观测地键与中文名（与 compute_sky.CONFIG.OBS_CITY_KEY 一致：揭阳） */
 function kcj_astro_default_place() {
-    return array('key' => 'jieyang', 'cn' => '揭阳');
+    return array('key' => 'beijing', 'cn' => '北京');
 }
 
 /**

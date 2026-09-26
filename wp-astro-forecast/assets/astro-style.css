@@ -150,6 +150,52 @@
   margin: 10px 0 14px;
 }
 .kcj-astro-disclaimer-block { margin-top: 18px; }
+
+/* ★ v2.3.21（LLM 交互痛点一）：数据窗口声明。
+   位置在定性句之后、日期行之前。视觉上要**弱于**定性句（它是补充边界，
+   不是主论点），但不能弱到看不见 —— 故用较小字号 + 次级色 + 无左边框
+   （左边框留给 .kcj-astro-verdict，避免两个"强调条"打架）。 */
+.kcj-astro-window {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #6a6a6a;
+  margin: 0 0 12px;
+}
+
+/* ★ v2.3.21（LLM 交互痛点二）：给 AI 的纯文本事实摘要。
+   折叠态不打扰读者；展开后是等宽纯文本，便于机器逐段抽取与人工核对。 */
+.kcj-astro-aidigest {
+  margin: 26px 0 10px;
+  border: 1px solid #e2ddd3;
+  border-radius: 8px;
+  background: #fbfaf7;
+}
+.kcj-astro-aidigest > summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  color: #5a5348;
+  font-weight: 600;
+  list-style: none;
+}
+.kcj-astro-aidigest > summary::-webkit-details-marker { display: none; }
+.kcj-astro-aidigest > summary::before {
+  content: "▸ ";
+  color: var(--kcj-cinnabar, #b03a2e);
+}
+.kcj-astro-aidigest[open] > summary::before { content: "▾ "; }
+.kcj-astro-aidigest-pre {
+  margin: 0;
+  padding: 0 14px 14px;
+  font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: #3d3830;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: transparent;
+  border: 0;
+}
 .kcj-astro-special { background: #fff4e6; border: 1px solid #ffd8a8; border-radius: 6px; padding: 8px 10px; font-size: 14px; }
 .kcj-astro-special ul { margin: 6px 0 0; padding-left: 18px; }
 .kcj-astro-special a { color: var(--kcj-cinnabar); }
@@ -800,4 +846,4 @@
 .kcj-astro-places-back:hover { color: var(--kcj-cinnabar); border-bottom-color: var(--kcj-cinnabar); }
 .kcj-astro-hub-title { margin: 0 0 10px; font-size: 16px; }
 
-/* kcj-astro-version: 2.3.18 */
+/* kcj-astro-version: 2.3.26 */

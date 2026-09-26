@@ -60,7 +60,7 @@ python python/build_dataset.py --start 2027-01-01 --end 2027-12-31
 
 # 推送到站点（WordPress.com：用「应用程序密码」，路径 用户 → 个人资料 → 应用程序密码）
 python python/build_dataset.py --start 2027-01-01 --end 2027-12-31 --push \
-  --wp-site https://kuangchujia.com --wp-user <用户名> --wp-app-password <应用程序密码>
+  --wp-site https://example.com --wp-user <用户名> --wp-app-password <应用程序密码>
 ```
 
 推送分批 200 行/请求（服务端上限 500）。导入成功后服务端会**自动清 transient 缓存**，

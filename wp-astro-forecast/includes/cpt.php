@@ -10,7 +10,7 @@
  *   激活钩子只保留「建表 + flush_rewrite_rules」。
  *
  * ★ 另一处架构裁定（F21）：指令 06 要求把模板放进
- *   `wp-content/themes/seedlet/`。**本站做不到**：kuangchujia.com 托管在
+ *   `wp-content/themes/seedlet/`。**本站做不到**：WordPress.com 托管时
  *   WordPress.com，主题目录对用户不可写（也不该写——主题升级会覆盖）。
  *   故改为「插件内置模板 + template_include 过滤器注入」，
  *   并保留 WP 惯例的优先级：**若主题里存在同名模板，以主题为准**。

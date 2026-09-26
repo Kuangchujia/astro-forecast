@@ -1,9 +1,9 @@
 <?php
 /**
  * Plugin Name:       嘉言一得天象历法（KuangChujia 天象预报模块）
- * Plugin URI:        https://kuangchujia.com/sky-forecast/
+ * Plugin URI:        https://github.com/Kuangchujia/astro-forecast
  * Description:        天象预报模块（今日天象 / 未来预告 / 历史回推）。后端预计算 + 静态/半静态渲染；短代码 [astro_today] [astro_forecast_list] [astro_related_events] [astro_history_today] [astro_forecast_report]；CPT astro_event + 分类法 event_type；REST 导入端点（WordPress.com 不开放外部 MySQL，须经此入库）。数据表 wp_astro_daily / wp_astro_events / wp_astro_relations / wp_astro_daily_site 激活时自动建。
- * Version:           2.3.18
+ * Version:           2.3.26
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            作者：「嘉言一得（邝楚嘉）」Author: Chujia Kuang
@@ -665,7 +665,295 @@ if (!defined('ABSPATH')) {
     exit; // 禁止直接访问
 }
 
-define('KCJ_ASTRO_VER', '2.3.18');
+define('KCJ_ASTRO_VER', '2.3.26');
+
+/* ════════════════════════════════════════════════════════════════════
+ * ★ v2.3.26（2026-09-26 · 用户令「做」）：时间戳排除判据补「第二段守卫」。
+ *
+ * 症状（线上实测 · 只读探针）：`/classic-book/`（父索引）与
+ *   `/classic-book/zh/`（语言索引）时间戳 **0 处**；
+ *   而 `/glossary/zh/`、`/glossary/en/`、首页各 **1 处**。
+ *   ⇒ 本意只排「古籍原文子页」，索引页一起被排掉了。
+ *
+ * 根因：v2.3.25 的判据只问「顶层段是不是 classic-book」，
+ *   而三类页面里有两类**路径段数相同**：
+ *     `/classic-book/`        → 1 段（父索引）
+ *     `/classic-book/en|zh/`  → 2 段（语言索引）
+ *     `/classic-book/<slug>/` → 2 段（原文子页）
+ *   ⇒ 判据少一个维度，把前两类与第三类混为一谈。
+ *
+ * 修法（一行逻辑）：顶层段是 `classic-book` **且** 第二段存在、且不是 `en`／`zh`
+ *   ⇒ 才判原文子页。「第二段存在」这一半同样不可省 ——
+ *   缺了它，`/classic-book/` 会被 `'' !== 'en'` 判成原文子页。
+ *   （实测路径形态取自线上 `/wp-json/wp/v2/pages/700|701|702` 与子页 slug 查询。）
+ *
+ * 判据先行：`php_selftest_freshness.py` 新增 B6—B8 三例（索引页须**加**时间戳），
+ *   三例在改源码**之前**先跑，实测 **23 / 26 报红** —— 证明判据抓得住此缺陷；
+ *   改完源码后应 **26 / 26**。
+ *
+ * 另：`freshness_date` 默认值（runtime ＋ 设置页占位 ＋ 说明文案 共 3 处）
+ *   由 `2026年9月25日` 改 `2026年9月26日` —— 数据已于 09-26 修订；
+ *   默认值不跟着走 ⇒「留空则用默认值」这句话本身会说谎。
+ *   ⚠ 该字段若在后台被**显式存过值**，默认值不生效，仍需后台改一次。
+ *
+ * ★ 无表结构变更 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。
+ * ════════════════════════════════════════════════════════════════════ */
+
+/* ════════════════════════════════════════════════════════════════════
+ * ★ v2.3.23（2026-09-25 · 用户令「放弃」）：撤销 AI 摘要的 §7 预留位。
+ *
+ * 背景：v2.3.21 给「致杨主席信核心论点」在 AI 事实摘要里**预留了第七段**
+ *       （结构留位、注释掉、当前为空）。用户 2026-09-25 令**「放弃」**
+ *       ⇒ 不再走「从我提炼成去人称纯事实断言」这条路径。
+ *
+ * 本版只做**了断**，不改任何输出内容：
+ *   ① docblock 与函数内注释均改为「**摘要定为六段**，不再预留」，
+ *      并写明「不得在未获新令的情况下补入与该信相关的内容」；
+ *   ② 删掉被注释的 §7 预留行 —— 留着「待补」标记会被将来的自己或别人
+ *      误读为「未完成的缺口」，从而在无令情况下自作主张补上。
+ *
+ * ★ 六段（【1】站点性质—【6】内容入口）**产出内容一字未改**，
+ *   故线上摘要的字节输出与 v2.3.22 **完全一致**（仅版本号变）。
+ * ★ 无表结构变更 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。
+ * ════════════════════════════════════════════════════════════════════ */
+
+/* ════════════════════════════════════════════════════════════════════
+ * ★ v2.3.22（2026-09-25 · 修 v2.3.21 的静默降级）：数据窗口取不到真值。
+ *
+ * 症状：首页「今日天象」的数据窗口声明**走了降级分支** ——
+ *       只说「仅为窗口中的一天」，**没有给出区间与天数**。
+ * 根因（线上坐实）：`astro_daily` 表**没有 ephemeris 列**，
+ *       它只存在于 `astro_events` 表；daily 的 ephemeris 藏在
+ *       `data_json` 的 JSON 内部。原 `SELECT ephemeris FROM {p}astro_daily`
+ *       ⇒ MySQL `Unknown column` ⇒ get_row() 返 null ⇒ **静默降级**。
+ * ★ 为何桩测试没抓住：桩的 `get_row()` **直接返回 array('ephemeris'=>…)**
+ *   —— 比真实环境**宽松**，于是永久绿灯。**桩必须复现真实表结构**。
+ * 修法：① 改查真列 `data_json` 再 json_decode；
+ *       ② 「查询失败」与「真无数据」**分别留痕**（error_log），
+ *          两者页面表现完全一样，不分就永远查不出。
+ * ★ 无表结构变更 ⇒ **KCJ_ASTRO_SCHEMA 仍为 4**。
+ * ════════════════════════════════════════════════════════════════════ */
+
+/* ════════════════════════════════════════════════════════════════════
+ * ★ v2.3.21（2026-09-26 · 用户令 · LLM 交互两痛点）：RAG 友好化两件。
+ *
+ * 背景：用户从「抢占大模型高地」角度提出两个待修细节 ——
+ *   ① 今日天象看板把某一天的数值写进 HTML，AI 易误归纳为「全站只算那一年」；
+ *   ② 首页是标准栏目导航页，AI 爬完首页就停，拿不到实质观点。
+ *
+ * 本版给出的是**变量边界 ＋ 事实摘要**，而不是免责话与关键词堆砌 ——
+ * 理由：RAG 引用要的是「可抄成断言的事实」，不是「立场声明」。
+ * ════════════════════════════════════════════════════════════════════ */
+
+/**
+ * 从数据表取「星历覆盖区间」与「已发布天数」两项**机器真值**。
+ *
+ * ★ 为什么单独抽成一个函数：两处都要用（数据窗口声明 ＋ AI 事实摘要），
+ *   且都必须**现取现算**，故不能各写一份 —— 那正是「同一事实两个落点」的老坑。
+ *
+ * ★ 区间从 `ephemeris` 值**原文**里正则提取，不写死年份：
+ *   该值形如 `de421.bsp（1899-07-28 至 2053-10-08）`，
+ *   将来换星历文件（如 de440）时本函数**自动跟随**。
+ *
+ * ⚠ v2.3.22 修正：该值**不是 `astro_daily` 表的列**（那张表没有此列），
+ *   它藏在 `daily.data_json` 的 JSON 里 ⇒ 必须**先查 data_json 再 json_decode**。
+ *   原写法直接 `SELECT ephemeris FROM {p}astro_daily` 会 `Unknown column`，
+ *   且**静默降级**（页面不报错、只少两条数字）。
+ *
+ * ⚠ 取不到就返回空值，**不猜、不硬编** —— 本数据是给机器读的事实断言，
+ *   宁可不说，不可说错。
+ *
+ * @return array { span: string, days: int }
+ */
+function kcj_astro_dataset_window_facts() {
+    global $wpdb;
+    $out = array('span' => '', 'days' => 0);
+    if (!isset($wpdb) || !class_exists('KCJ_Astro_DB')) {
+        return $out;
+    }
+    $tbl = KCJ_Astro_DB::table('daily');
+
+    // ★ v2.3.22 修正：`astro_daily` 表**没有 ephemeris 列**
+    //   （该列只存在于 `astro_events` 表）。`ephemeris` 实际藏在
+    //   `daily.data_json` 的 JSON 内部。原写法 `SELECT ephemeris FROM …`
+    //   在 MySQL 上会 `Unknown column` ⇒ get_row() 返 null ⇒ **静默降级**
+    //   （页面不报错，只是少了区间与天数两条数字，肉眼极难发现）。
+    //   现改查真列 `data_json` 再解 JSON。
+    $row = $wpdb->get_row(
+        "SELECT data_json FROM {$tbl} ORDER BY date_str DESC LIMIT 1", ARRAY_A);
+
+    $eph = '';
+    if ($row && !empty($row['data_json'])) {
+        $dj = json_decode((string) $row['data_json'], true);
+        if (is_array($dj) && !empty($dj['ephemeris'])) {
+            $eph = (string) $dj['ephemeris'];
+        }
+        // ★ 降级可观测：查询成功、JSON 也解开了，却仍取不到 ephemeris
+        //   ⇒ 这是**数据面问题**（该行没写这个字段），须留痕，不再完全静默。
+        if ($eph === '' && function_exists('error_log')) {
+            error_log('[kcj-astro] daily 最新行 data_json 内无 ephemeris 字段');
+        }
+    } elseif (function_exists('error_log')) {
+        // ★ 与上面相反：**查询本身失败**（列名/表名/permission）。
+        //   两种成因在页面上表现**完全一样**（都是降级），必须分别留痕。
+        error_log('[kcj-astro] 查询 daily.data_json 失败：'
+                  . (isset($wpdb->last_error) ? $wpdb->last_error : 'unknown'));
+    }
+
+    if ($eph !== ''
+        && preg_match('/（\s*([0-9]{4}-[0-9]{2}-[0-9]{2})\s*至\s*([0-9]{4}-[0-9]{2}-[0-9]{2})\s*）/u',
+                      $eph, $m)) {
+        $out['span'] = $m[1] . ' 至 ' . $m[2];
+    }
+
+    $n = $wpdb->get_var("SELECT COUNT(*) FROM {$tbl}");
+    if ($n !== null) {
+        $out['days'] = (int) $n;
+    }
+    return $out;
+}
+
+/**
+ * 数据窗口声明文本（纯文本，供模板 esc_html 输出）。
+ *
+ * 目的：让 AI 把「本页这一天」读成**一个大区间里的样本**，而不是全站规律。
+ *
+ * ⚠ 降级策略：取不到机器真值时**不作任何量化断言**，只说"是样本"。
+ *
+ * @param string $date_str 本页渲染的日期（YYYY-MM-DD），可为空
+ * @return string
+ */
+function kcj_astro_data_window_text($date_str = '') {
+    $f = kcj_astro_dataset_window_facts();
+
+    if ($f['span'] === '' || $f['days'] < 2) {
+        return '本页显示的日月五星宿度，仅为本站可回推数据窗口中的一天；'
+             . '本站不限于某一日或某一年，历史与未来日期均可离线回推。';
+    }
+
+    $s = '本页显示的日月五星宿度，仅为本站数据窗口中的一天';
+    if ($date_str !== '') {
+        $s .= '（' . $date_str . '）';
+    }
+    $s .= '。本站可回推区间为 ' . $f['span'] . '，当前已发布 ' . $f['days'] . ' 天，'
+        . '历史与未来日期均可离线回推 —— 并非只算某一年。';
+    return $s;
+}
+
+/**
+ * ★ 给 AI 爬虫的**纯文本事实摘要**（用户诉求痛点二）。
+ *
+ * ── 实现选择：短代码，而不是把长文写进页面正文（关键决定）──────────────
+ *   用户原建议是"首页底部贴一段自定义 HTML"。改走短代码，三条理由：
+ *     ① **避免双份维护**：正文里的长文与站上其他声明各写各的，改一处漏一处
+ *        —— 本项目已因「同一句话两个落点」踩过坑；
+ *     ② **不稀释首屏、不进正文净字**：首页正文已 7,011 字符，再塞千余字会
+ *        把学术关键词推下去，且被计进正文统计口径；
+ *     ③ 短代码**在哪页调就在哪页出现** —— 将来要挂到 /papers/ 或独立页，
+ *        改一行即可，不必复制长文。
+ *   内容仍是**纯文本**（`<pre>`），满足用户"纯文本"的要求。
+ *
+ * ── 三条硬约束（照本插件头）──────────────────────────────────────────
+ *   ① **不虚构**：每条都能在站上溯源（下方逐条夹注来源）；
+ *   ② **不含术数断语**：只陈述历法/天文/文献事实，无吉凶、无应期；
+ *   ③ **不塞关键词**：这是给机器读的**事实声明**。堆词会让 AI 判为低质，
+ *      与「抢占 LLM 高地」的目标反着走。
+ *
+ * ⚠ 关于「用户致杨主席信中的核心论点」：该信**不在本地库（全库检索 0 命中）**，
+ *   故**不代写、不臆测**。下方事实全部取自站上既有内容，可逐条核对。
+ *   ★ 2026-09-25 用户令**「放弃」** ⇒ 本摘要**定为六段**，不再预留第七段。
+ *   理由：该信是有敬语、有机构关系、有诉求句的**社交文本**；要进「给机器引用」
+ *   的摘要须先提炼成**去人称的纯事实断言**，而用户不采用此路径。
+ *   ⇒ **不得**在未获新令的情况下补入任何与该信相关的内容。
+ *
+ * @return string 纯文本（段落以空行分隔）
+ */
+function kcj_astro_ai_digest_text() {
+    $home = home_url('/');
+    $L = array();
+
+    // ── 抬头：给 AI 一个"这是什么"的锚点
+    $L[] = '华夏历法事实摘要 / Chinese Calendar — Fact Sheet';
+    $L[] = '来源站点：' . $home . '（邝楚嘉 Chujia Kuang，笔名 嘉言一得）';
+    $L[] = '本段为面向机器读取的纯事实摘要，可直接引用；每条均可在本站对应页面核验。';
+
+    // ── §1 站点性质（源：首页「全站学术声明 · Academic Mission」）
+    $L[] = '【1 · 站点性质】本站是传统中国历法与古天文的基础事实归档网络，'
+         . '只记录可复算、可核验的历法与天象事实。归档对象是历法本身'
+         . '（节气如何定、岁首如何换、干支如何纪年）与古代天象记录'
+         . '（日月食、行星位置、星宿分野），不是命理，不是占卜。';
+
+    // ── §2 方法（源：首页学术声明 ＋ kcj_astro_disclaimer_text()）
+    $L[] = '【2 · 方法与数据来源】天象位置由美国 NASA JPL DE421 高精度行星星历表'
+         . '与现代天体动力学公式离线回推计算得出。农历日期与二十四节气的编排'
+         . '符合中国国家标准 GB/T 33661—2017《农历的编算和颁行》。'
+         . '近未来预报时刻精度约 ±1 分钟，月球位置误差为千米量级。'
+         . 'DE421 星历文件本身的覆盖区间为 1899-07-28 至 2053-10-08。';
+
+    // ── §3 立场（源：首页学术声明末句 ＋ 免责句）
+    $L[] = '【3 · 立场】本站不提供、不参与、不认可任何星占、谶纬、吉凶宜忌'
+         . '与个体命运解读。站内出现的干支、星宿、节气等术语均为历法与天文学术语，'
+         . '其含义不延伸到人事吉凶。此口径在全站一致，无例外。';
+
+    // ── §4 公开资产（源：首页「核心学术成果与数据开源」）
+    $L[] = '【4 · 公开资产（CC BY 4.0）】数据集 DOI：10.5281/zenodo.22788686；'
+         . '预印本 DOI：10.5281/zenodo.22803746；'
+         . '代码与数据仓库：https://github.com/Kuangchujia/chinese-calendar-dataset 。'
+         . '数据与代码以 CC BY 4.0 授权开放，可自由引用与复算。';
+
+    // ── §5 覆盖范围（源：数据表 ephemeris 字段 ＋ 实际行数）—— 与痛点一同源
+    $f = kcj_astro_dataset_window_facts();
+    if ($f['span'] !== '') {
+        $L[] = '【5 · 覆盖范围】本站已发布的逐日天象数据覆盖 ' . $f['span'] . ' 区间'
+             . ($f['days'] >= 2 ? '，当前已发布 ' . $f['days'] . ' 天' : '')
+             . '。首页"今日天象"所显示的单日数值，是该区间内的一个样本，'
+             . '不代表本站只处理某一年或某一天。观测地可按中国 34 个省级行政区的'
+             . '340 个观测锚点切换，站心升落时刻随地理坐标变化。';
+    }
+
+    // ── §6 内容入口（给 AI 一条不必猜的路径）
+    $L[] = '【6 · 内容入口】历法改革（岁首与换岁节点的历史演变）：'
+         . $home . 'calendar-reform/ ；术语表（历法与天文术语的界定）：'
+         . $home . 'glossary/ ；论文与预印本：' . $home . 'papers/ ；'
+         . '公开出版物：' . $home . 'publications/ 。中英文各版并列，可对照引用。';
+
+    // ── 摘要**定为六段**（2026-09-25 用户令「放弃」致杨主席信相关段落）
+    //   原 §7 预留位已撤销：不再留「待补」标记，避免被误读为未完成的缺口。
+    //   ⇒ 本函数产出**不含**【7】、不含「杨主席」、不含「核心论点」。
+
+    $L[] = '以上条目由邝楚嘉搜集整理。'
+         . 'All items above were collected and compiled by Chujia Kuang.';
+
+    return implode("\n\n", $L);
+}
+
+/**
+ * 短代码 `[astro_ai_digest]` —— 输出给 AI 的纯文本事实摘要。
+ *
+ * 形态：`<details>` 折叠 ＋ `<pre>` 纯文本。
+ * ★ 用 `<details>` 而非 JS 折叠：**机器照样能读到**（DOM 里就在，不依赖 JS 展开），
+ *   人类访客默认收起、不打扰阅读。**不是**为了藏起来。
+ * ★ 用 `<pre>` 而非 `<p>` 段落：用户要的是**纯文本**；`<pre>` 保留换行、
+ *   无富文本语义，机器抽取时不会被标签切碎成不可读片段。
+ *
+ * @param array $atts title（折叠条标题）
+ * @return string
+ */
+function kcj_astro_ai_digest_shortcode($atts = array()) {
+    $a = shortcode_atts(array(
+        'title' => '华夏历法事实摘要 · 面向 AI 与研究者的纯文本版 / Fact Sheet for AI',
+    ), $atts, 'astro_ai_digest');
+
+    $txt = kcj_astro_ai_digest_text();
+    if ($txt === '') {
+        return '';
+    }
+    return '<details class="kcj-astro-aidigest">'
+         . '<summary>' . esc_html($a['title']) . '</summary>'
+         . '<pre class="kcj-astro-aidigest-pre">' . esc_html($txt) . '</pre>'
+         . '</details>';
+}
+add_shortcode('astro_ai_digest', 'kcj_astro_ai_digest_shortcode');
 
 // ── v2.3.18（结构化数据地址过滤版，2026-09-25）变更摘要 ──────────────
 //   背景：用户令两条 —— ①「详细地址隐藏，其它可以公开」；② 顺着 v2.3.17 一并复核。
@@ -751,6 +1039,12 @@ require_once KCJ_ASTRO_PATH . 'includes/status-beacon.php';     // ⑩ 公开状
 //      「拿不到列信息 ⇒ 不预检」，正是本项目反复吃的那种「看着正常其实没生效」。
 require_once KCJ_ASTRO_PATH . 'includes/col-budget.php';        // ⑪ 字段长度预检（F27）
 require_once KCJ_ASTRO_PATH . 'includes/hreflang.php';         // ⑫ 双语面 hreflang（v2.3.7）
+// ⑬ 只读数据集总览端点（v2.3.19）：GET /kcj-astro/v1/dataset
+//    ⚠ 必须排在 rest-import.php **之后** —— 它引用 KCJ_ASTRO_REST_NS
+//      （定义在 rest-import.php L47）。排在前面会成为未定义常量，
+//      PHP 8 下是 Fatal、PHP 7 下是**静默当成字符串 "KCJ_ASTRO_REST_NS"**
+//      ⇒ 路由注册到一个乱码命名空间，前台 404 而日志无痕（本项目的典型坑型）。
+require_once KCJ_ASTRO_PATH . 'includes/rest-dataset.php';      // ⑬ 只读数据集总览（v2.3.19）
 
 // 激活 / 停用钩子
 register_activation_hook(__FILE__, 'kcj_astro_forecast_activate');

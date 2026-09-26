@@ -39,6 +39,139 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+/* ========================= 〇、修订时间戳（严律二 · 用户令 2026-09-25（v2.3.25 扩为全站））=========
+ *
+ * 用户令原话：
+ *   「保持更新时间戳（Freshness Timestamp）的机读透明度……每一次您在网站上
+ *    修订了 115 部历法的演变常数后，请务必在文章最顶部留下一行纯文本：
+ *    最后修订时间：2026年X月X日」
+ *
+ * 为什么单独成节并置于文件最前（而非并入「一、免责声明」）：
+ *   ① 时间戳必须落在**正文最前**，早于一切其他注入（免责声明在尾部）；
+ *   ② 它是**给机器读的**（Perplexity 等实时 RAG 有强近期偏好），
+ *      故形态限定为「纯文本一行」，**不得**包成 fancy 组件、不得只写进 meta；
+ *   ③ 与「单一真值源」原则一致：日期只在本文件一处维护。
+ *
+ * 启用方式（两条任一即可，均为显式声明，不做全站无差别注入）：
+ *   A. 页面正文里加一行 HTML 注释 `<!-- kcj-fresh -->`（读者不可见，零维护）；
+ *   B. 管理端「模块设置」里填页面 ID 名单（freshness_page_ids）。
+ *
+ * 硬性约束：本文件不写入任何占星/运势/吉凶/谶纬字样。
+ */
+
+/**
+ * 修订日期 —— 单一真值源。
+ * 每次修订「历法演变」相关内容后，**只改这一个常量**即可全站生效。
+ * 格式固定为「Y年n月j日」，与用户令的书面写法逐字一致。
+ */
+function kcj_astro_freshness_date() {
+    return kcj_astro_opt('freshness_date', '2026年9月26日');
+}
+
+/** 时间戳行的指纹（用于去重判定） */
+function kcj_astro_freshness_signature() {
+    return '最后修订时间：';
+}
+
+/** 时间戳行的 HTML 形态：纯文本一行，独立成段 */
+function kcj_astro_freshness_block() {
+    return '<p class="kcj-astro-freshness">'
+         . esc_html(kcj_astro_freshness_signature() . kcj_astro_freshness_date())
+         . '</p>' . "\n";
+}
+
+/** 该页是否启用时间戳 */
+function kcj_astro_page_wants_freshness($content) {
+    // ① 排除面优先 —— 排除一旦命中，任何启用声明都不生效
+    if (kcj_astro_freshness_is_excluded()) {
+        return false;
+    }
+    // ② 显式启用两路（保留 v2.3.24 行为，向后兼容）
+    if (strpos($content, '<!-- kcj-fresh -->') !== false) {
+        return true;   // A. 页面自我声明
+    }
+    $id = get_the_ID();
+    if (!$id) {
+        return false;
+    }
+    $ids = kcj_astro_opt('freshness_page_ids', '');
+    foreach (explode(',', (string) $ids) as $pid) {
+        if ((int) trim($pid) === (int) $id) {
+            return true;   // B. 名单列入
+        }
+    }
+    // ③ ★ v2.3.25：未命中任何声明时 —— **默认全站启用**
+    //    用户令「全站执行时间戳」⇒ 默认值由 false 改 true。
+    return true;
+}
+
+/**
+ * 该页是否被排除出时间戳面。
+ *
+ * 两个维度：
+ *   a. 管理端「排除页面 ID」名单（freshness_exclude_ids）；
+ *   b. **古籍原文子页**（`classic-book` 顶层段 **＋ 第二段存在且不是 `en`／`zh`**）——
+ *      古籍原文是「抄录对象」，本身不随时间修订；给它加「最后修订时间」会把
+ *      「抄录日期」冒充成「原文修订日期」，属**失真**，故默认排除。
+ *
+ * ⚠ 判据用「路径顶层段等于 classic-book」，不用「slug 含某串」——
+ *    后者会误伤本插件自己的页面（见技能：判据不得「子串即可」）。
+ * ⚠ v2.3.26 再加**「第二段守卫」**—— 索引页与原文子页**路径段数相同**
+ *    （都是两段），只判顶层段会把 `/classic-book/` 与 `/classic-book/en|zh/`
+ *    一起排掉，与本意相反。详见函数内注释与主件 v2.3.26 变更块。
+ */
+function kcj_astro_freshness_is_excluded() {
+    $id = get_the_ID();
+    if (!$id) {
+        return false;
+    }
+    // a. 显式排除名单
+    $ex = kcj_astro_opt('freshness_exclude_ids', '');
+    foreach (explode(',', (string) $ex) as $pid) {
+        if (trim($pid) !== '' && (int) trim($pid) === (int) $id) {
+            return true;
+        }
+    }
+    // b. 古籍原文子页：读该页永久链接，取顶层路径段
+    $link = (string) get_permalink($id);
+    if ($link === '') {
+        return false;
+    }
+    $path = (string) parse_url($link, PHP_URL_PATH);
+    $segs = array_values(array_filter(explode('/', $path), 'strlen'));
+    if (!empty($segs) && $segs[0] === 'classic-book') {
+        // ★ v2.3.26：**只排「原文子页」，不排索引页** ——
+        //    线上实测三类路径：/classic-book/（父索引 · 1 段）、
+        //    /classic-book/en|zh/（语言索引 · 2 段）、/classic-book/<slug>/（原文子页 · 2 段）。
+        //    v2.3.25 只判「顶层段等于 classic-book」⇒ 把前两类**一并排除**，
+        //    与本意相反 —— 索引页恰恰是要带时间戳的面。
+        //    两半都不可省：缺 `$second !== ''` 这一半，
+        //    /classic-book/（无第二段）会被 `'' !== 'en'` 判成原文子页。
+        $second = isset($segs[1]) ? $segs[1] : '';
+        if ($second !== '' && $second !== 'en' && $second !== 'zh') {
+            return true;
+        }
+    }
+    return false;
+}
+
+add_filter('the_content', 'kcj_astro_prepend_freshness', 19);
+function kcj_astro_prepend_freshness($content) {
+    if (is_admin() || is_feed() || is_embed()) {
+        return $content;
+    }
+    if (!kcj_astro_page_wants_freshness($content)) {
+        return $content;
+    }
+    if (strpos($content, kcj_astro_freshness_signature()) !== false) {
+        return $content;   // 已含（例如作者手写），不重复
+    }
+    // ① 去掉自我声明标记，避免它出现在读者可见的 HTML 里
+    $content = str_replace('<!-- kcj-fresh -->', '', $content);
+    // ② 前置一行时间戳 —— **最顶部**，这是本功能的全部意义
+    return kcj_astro_freshness_block() . $content;
+}
+
 /* ========================= 一、免责声明 ========================= */
 
 /** 统一声明的正文（模板与钩子共用；改这一处即全站一致） */
@@ -230,6 +363,9 @@ add_action('admin_init', function () {
                 'auto_links'           => (isset($in['auto_links']) && $in['auto_links'] == 1) ? 1 : 0,
                 'link_map'             => sanitize_textarea_field(isset($in['link_map']) ? $in['link_map'] : ''),
                 'disclaimer_page_ids'  => sanitize_text_field(isset($in['disclaimer_page_ids']) ? $in['disclaimer_page_ids'] : ''),
+                'freshness_date'       => sanitize_text_field(isset($in['freshness_date']) ? $in['freshness_date'] : ''),
+                'freshness_page_ids'   => sanitize_text_field(isset($in['freshness_page_ids']) ? $in['freshness_page_ids'] : ''),
+                'freshness_exclude_ids' => sanitize_text_field(isset($in['freshness_exclude_ids']) ? $in['freshness_exclude_ids'] : ''),
             );
         },
     ));
@@ -259,6 +395,27 @@ function kcj_astro_render_settings() {
                 placeholder="日食|/sky-forecast/solar_eclipse/"><?php
                 echo esc_textarea(isset($o['link_map']) ? $o['link_map'] : ''); ?></textarea>
               <p class="description">每行一条「关键词|URL」。留空则自动从分类法类型名派生。</p>
+            </td>
+          </tr>
+          <tr>
+            <th>最后修订时间</th>
+            <td>
+              <input type="text" class="regular-text" name="kcj_astro_options[freshness_date]"
+                value="<?php echo esc_attr(isset($o['freshness_date']) && $o['freshness_date'] !== '' ? $o['freshness_date'] : '2026年9月26日'); ?>" />
+              <p class="description">纯文本一行，置于正文最顶部，供大模型读取。格式：<code>2026年9月26日</code>。留空则用默认值。</p>
+            </td>
+          </tr>
+          <tr>
+            <th>★ v2.3.25 起<strong>全站默认启用</strong>；此处填的是<strong>额外排除</strong>的页面 ID</th>
+            <td>
+              <input type="text" class="regular-text" name="kcj_astro_options[freshness_page_ids]"
+                value="<?php echo esc_attr(isset($o['freshness_page_ids']) ? $o['freshness_page_ids'] : ''); ?>" />
+            </p>
+            <p>
+              <label style="display:block;margin-bottom:4px"><strong>排除「最后修订时间」的页面 ID</strong>（逗号分隔；古籍原文子页已默认排除，无需填写）</label>
+              <input type="text" class="regular-text" name="kcj_astro_options[freshness_exclude_ids]"
+                value="<?php echo esc_attr(isset($o['freshness_exclude_ids']) ? $o['freshness_exclude_ids'] : ''); ?>" />
+              <p class="description">逗号分隔。也可在页面正文里加一行 <code>&lt;!-- kcj-fresh --&gt;</code> 自我声明，二者任一即可。</p>
             </td>
           </tr>
           <tr>

@@ -10,7 +10,7 @@
  *        站点（自建服务器 / 有 CI 的环境）挂回调去跑本地脚本；
  *     ② **审计**数据新鲜度（最新日记录 vs 今天），把结论写进 option；
  *     ③ 刷新插件自己的 transient 缓存。
- *   在 kuangchujia.com（WordPress.com 托管）上，真正的重算路径是：
+ *   在 WordPress.com 托管环境下，真正的重算路径是：
  *     本机跑 `python/build_dataset.py --start ... --end ... --push`
  *     → 经 REST 端点 (kcj-astro/v1/import) 入库 → 服务端自动清缓存。
  *   另：WordPress.com 默认禁用真实的系统 WP-Cron（由平台侧定时器或页面访问触发），
