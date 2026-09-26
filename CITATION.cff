@@ -26,6 +26,13 @@ doi: "10.5281/zenodo.22950008"
 date-released: "2026-09-25"
 url: "https://kuangchujia.com"
 repository-code: "https://github.com/Kuangchujia/astro-forecast"
+identifiers:
+  - type: other
+    value: "https://openalex.org/A5151908354"
+    description: "OpenAlex author index — 邝楚嘉（Chujia Kuang）"
+  - type: url
+    value: "https://kuangchujia.com"
+    description: "Author hub — 全部成果总入口"
 license: "MIT"
 keywords:
   - "astronomy"

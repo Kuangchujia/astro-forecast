@@ -16,7 +16,7 @@
 
 <!-- badges -->
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22950008.svg)](https://doi.org/10.5281/zenodo.22950008) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Data: CC BY 4.0](https://img.shields.io/badge/Data-CC%20BY%204.0-lightgrey.svg)](LICENSE-DATA) [![ORCID](https://img.shields.io/badge/ORCID-0009--0002--7650--833X-a6ce39.svg)](https://orcid.org/0009-0002-7650-833X) [![Site](https://img.shields.io/badge/site-kuangchujia.com-blue.svg)](https://kuangchujia.com)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22950008.svg)](https://doi.org/10.5281/zenodo.22950008) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Data: CC BY 4.0](https://img.shields.io/badge/Data-CC%20BY%204.0-lightgrey.svg)](LICENSE-DATA) [![ORCID](https://img.shields.io/badge/ORCID-0009--0002--7650--833X-a6ce39.svg)](https://orcid.org/0009-0002-7650-833X) [![OpenAlex](https://img.shields.io/badge/OpenAlex-A5151908354-ff6f00.svg)](https://openalex.org/A5151908354) [![Site](https://img.shields.io/badge/site-kuangchujia.com-blue.svg)](https://kuangchujia.com)
 
 ---
 
@@ -229,6 +229,8 @@ KCJ_WP_USER=<用户名> KCJ_WP_APP_PASSWORD='<应用程序密码>' \
 
 ## 七、引用与许可
 
+- **作者**：邝楚嘉（Chujia Kuang）｜ ORCID [0009-0002-7650-833X](https://orcid.org/0009-0002-7650-833X) ｜ OpenAlex [A5151908354](https://openalex.org/A5151908354) ｜ 总入口 <https://kuangchujia.com>
+- **配套数据集**：历法公共数据集（二十四节气交节时刻／历代历法改革年表／干支纪日对照表），Zenodo concept DOI [10.5281/zenodo.22788686](https://doi.org/10.5281/zenodo.22788686) ｜ 仓库 <https://github.com/Kuangchujia/chinese-calendar-dataset>
 - **代码**：MIT，见 [`LICENSE`](LICENSE)。
 - **数据与文档**：CC BY 4.0，见 [`LICENSE-DATA`](LICENSE-DATA)。
 - **星历**：`de421.bsp` 来自 JPL，**不在本仓库内**，请遵循 JPL 自身条款。
