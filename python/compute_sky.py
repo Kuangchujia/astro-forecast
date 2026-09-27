@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# ──────────────────────────────────────────────────────────────
+# License (dual-track / 双轨制授权隔离)
+#   · Software code — MIT (see LICENSE).
+#   · Calculated calendrical data & outputs — CC BY 4.0 (see LICENSE-DATA).
+#   · Third-party material & exceptions — see NOTICE.md.
+# ──────────────────────────────────────────────────────────────
 # =============================================================================
 # 天象预报模块 · Python 批量计算脚本（交付物 B）
 # 版本：v1.1.0（2026-09-22 可行性修订版；v1.0.0 存在 6 处致命 API 误用，见下）

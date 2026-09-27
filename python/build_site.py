@@ -1,5 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# ──────────────────────────────────────────────────────────────
+# License (dual-track / 双轨制授权隔离)
+#   · Software code — MIT (see LICENSE).
+#   · Calculated calendrical data & outputs — CC BY 4.0 (see LICENSE-DATA).
+#   · Third-party material & exceptions — see NOTICE.md.
+# ──────────────────────────────────────────────────────────────
 """build_site.py —— 观测地维度数据集构建（v2.0.0 新增）
 
 角色

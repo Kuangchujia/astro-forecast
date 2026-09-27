@@ -1,5 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# ──────────────────────────────────────────────────────────────
+# License (dual-track / 双轨制授权隔离)
+#   · Software code — MIT (see LICENSE).
+#   · Calculated calendrical data & outputs — CC BY 4.0 (see LICENSE-DATA).
+#   · Third-party material & exceptions — see NOTICE.md.
+# ──────────────────────────────────────────────────────────────
 """history_events.py —— 历史天象数据集（v2.0.0 新增 · v2.1.0 扩族）
 
 角色

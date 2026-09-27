@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# ──────────────────────────────────────────────────────────────
+# License (dual-track / 双轨制授权隔离)
+#   · Software code — MIT (see LICENSE).
+#   · Calculated calendrical data & outputs — CC BY 4.0 (see LICENSE-DATA).
+#   · Third-party material & exceptions — see NOTICE.md.
+# ──────────────────────────────────────────────────────────────
 """event_almanac.py — 天象事件的**时刻求根**与事件行装配（v1.3.0）
 
 ━━━ 分工（与 compute_sky.py 的边界） ━━━

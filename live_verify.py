@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# ──────────────────────────────────────────────────────────────
+# License (dual-track / 双轨制授权隔离)
+#   · Software code — MIT (see LICENSE).
+#   · Calculated calendrical data & outputs — CC BY 4.0 (see LICENSE-DATA).
+#   · Third-party material & exceptions — see NOTICE.md.
+# ──────────────────────────────────────────────────────────────
 """
 live_verify.py —— 线上验收（上传新版之后跑这一条）
 

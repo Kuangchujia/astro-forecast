@@ -1,4 +1,12 @@
 <?php
+/*
+ * License (dual-track / 双轨制授权隔离)
+ *   · Software code — MIT (see LICENSE). This plugin directory's
+ *     WordPress header additionally declares GPL-2.0-or-later, the
+ *     WordPress ecosystem convention — see NOTICE.md.
+ *   · Calculated calendrical data & outputs — CC BY 4.0 (see LICENSE-DATA).
+ *   · Third-party material & exceptions — see NOTICE.md.
+ */
 /**
  * kcj-astro · 列宽预算（column budget）
  *    —— 「这一行写进去会不会被**静默截断**」的唯一判据来源。

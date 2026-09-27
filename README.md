@@ -238,6 +238,17 @@ KCJ_WP_USER=<用户名> KCJ_WP_APP_PASSWORD='<应用程序密码>' \
 
 ---
 
+## License
+
+- **Software Code**: Released under the [MIT License](LICENSE).
+- **Calculated Calendrical Data & Outputs**: Released under the [CC BY 4.0 License](https://creativecommons.org/licenses/by/4.0/).
+
+> 例外与第三方材料见 [`NOTICE.md`](NOTICE.md)：插件目录 `wp-astro-forecast/`
+> 按 WordPress 生态惯例在文件头另声明 `GPL-2.0-or-later`（MIT 与之兼容）；
+> `de421.bsp` 不在仓库内，权利属 JPL / NASA。
+
+---
+
 ## 八、Star History
 
 如果这套东西对你有用，欢迎引用其配套的数据集与预印本（见

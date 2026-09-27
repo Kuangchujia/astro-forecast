@@ -19,15 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-Note on bundled third-party material:
-
-  The WordPress plugin in `wp-astro-forecast/` declares `GPL-2.0-or-later` in
-  its header, which is the WordPress ecosystem convention. Where the plugin
-  directory is concerned, GPL-2.0-or-later governs. The Python computation
-  kernel, the SQL schema, the documentation and the samples are MIT.
-
-  `de421.bsp` (JPL planetary ephemeris) is NOT distributed in this repository.
-  It is downloaded at runtime by Skyfield and is subject to JPL's own terms.

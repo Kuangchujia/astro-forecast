@@ -1,4 +1,12 @@
 <?php
+/*
+ * License (dual-track / 双轨制授权隔离)
+ *   · Software code — MIT (see LICENSE). This plugin directory's
+ *     WordPress header additionally declares GPL-2.0-or-later, the
+ *     WordPress ecosystem convention — see NOTICE.md.
+ *   · Calculated calendrical data & outputs — CC BY 4.0 (see LICENSE-DATA).
+ *   · Third-party material & exceptions — see NOTICE.md.
+ */
 /**
  * 后台「数据导入」页（v2.2.0 新增）
  *

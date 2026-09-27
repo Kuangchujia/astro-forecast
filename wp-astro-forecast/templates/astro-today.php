@@ -1,4 +1,12 @@
 <?php
+/*
+ * License (dual-track / 双轨制授权隔离)
+ *   · Software code — MIT (see LICENSE). This plugin directory's
+ *     WordPress header additionally declares GPL-2.0-or-later, the
+ *     WordPress ecosystem convention — see NOTICE.md.
+ *   · Calculated calendrical data & outputs — CC BY 4.0 (see LICENSE-DATA).
+ *   · Third-party material & exceptions — see NOTICE.md.
+ */
 /**
  * 模板 A：老黄历内嵌「今日天象」板块（v2.0.0：加观测地选择）
  * 数据源：wp_astro_daily.data_json（地心量）＋ wp_astro_daily_site（升落与晨昏，按观测地）

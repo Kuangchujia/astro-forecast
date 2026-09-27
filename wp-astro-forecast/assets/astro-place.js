@@ -1,3 +1,10 @@
+/*
+ * License (dual-track / 双轨制授权隔离)
+ *   · Software code — MIT (see LICENSE).
+ *   · Calculated calendrical data and outputs — CC BY 4.0 (see LICENSE-DATA).
+ *   · Third-party material and exceptions — see NOTICE.md.
+ *   （本文件不得出现裸与号字符，故凡该字符处一律改写为 and。）
+ */
 /**
  * 观测地选择（v2.0.0 建；v2.3.0 扩到全国；v2.3.3 加省份 Tab ＋ 城市网格；v2.3.5 加定位双守卫；
  *           v2.3.6 网格移出首页 ＋ localStorage 承接）
