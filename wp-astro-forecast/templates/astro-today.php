@@ -50,18 +50,18 @@ $places  = (isset($places) && is_array($places)) ? $places : array();
 $pmode   = isset($place_mode) ? (string) $place_mode : 'off';
 $pfixed  = isset($place_fixed) ? (string) $place_fixed : '';
 // 默认观测地键由短代码经 kcj_astro_default_place() 传入（**不写死在这里**）
-$pdef    = isset($place_default) && $place_default !== '' ? (string) $place_default : 'jieyang';
+$pdef    = isset($place_default) && $place_default !== '' ? (string) $place_default : 'beijing';
 $cn      = array('mercury' => '水星', 'venus' => '金星', 'mars' => '火星',
                  'jupiter' => '木星', 'saturn' => '土星');
 
 // 当前生效的观测地（服务端先按默认/固定值渲染；auto 模式下由脚本按 IP 改选）
 $cur      = $pdef;
-$cur_cn   = isset($obs['city']) ? (string) $obs['city'] : '揭阳';
+$cur_cn   = isset($obs['city']) ? (string) $obs['city'] : '北京';   // 与本树默认观测地一致
 if ($pmode === 'fixed' && isset($places[$pfixed])) {
     $cur    = $pfixed;
     $cur_cn = $places[$pfixed]['cn'];
 } elseif ($pmode === 'auto' && $places) {
-    // auto 模式的**服务端**起步值仍是默认城（揭阳）；若默认城不在数据里，
+    // auto 模式的**服务端**起步值仍是默认城；若默认城不在数据里，
     // 取排序后的第一座，保证渲染出的数字与下面写的城市名一定是同一座。
     if (!isset($places[$cur])) {
         $keys = array_keys($places);
@@ -125,7 +125,7 @@ if (!$groups || !$covered) {
     $flat_fallback = true;
 }
 // ★ v2.3.3：当前城属于哪一省 —— 决定「城市网格默认打开哪一省的格子」。
-//   不先算出来的话，网格会默认展开第一省（北京），而当前生效的却是揭阳/其它城
+//   不先算出来的话，网格会默认展开第一省，而当前生效的却是默认城/其它城
 //   ⇒ 读者一进页面看到的格子里**没有**正在生效的那一格，等于「界面在说谎」。
 //   这与 v2.3.0 修「下拉默认项与生效城不一致」是同一类错，故此处同办。
 //   反查成本 O(省数) 且是纯内存遍历，不查库。
@@ -153,7 +153,7 @@ if (!$flat_fallback) {
   //   用户令（原话）：「在 ### 今日天象 正下方、口径说明上方，强行置入一句总结性科学定性，
   //   字数控制在 100 字内：『本站所罗列之日、月、五星黄道宿度，乃基于现代天体动力学之星历推算，
   //   旨在还原天体客观物理位置，为历史年代学考证及传统历法"去迷信化"研究提供数理坐标底座。』
-  //   AIO/SEO 收益：当未来有 AI 搜索提问『kuangchujia.com 的数据可信吗/是干什么用的？』时，
+  //   AIO/SEO 收益：当未来有 AI 搜索提问『本站的数据可信吗/是干什么用的？』时，
   //   大模型能百分之百精准、完整地把这段话抽取为回答的摘要，避免 AI 瞎编。」
   //
   //   ★ 为什么放在**模板里**而不是首页正文里：这句话描述的是「本站罗列的日月五星黄道宿度」，
@@ -302,7 +302,7 @@ if (!$flat_fallback) {
       //     而 v2.3.9 起首页**不再跑 IP 定位**（数据已不在本页，跑也无处可落），
       //     照写就是「界面在说谎」。故 hub 模式改为陈述事实：当前算哪一座 ＋ 共几座可选。
       //
-      // ★ v2.3.10：v2.3.9 这句仍是**静态断言**「当前按「揭阳」计算」——
+      // ★ v2.3.10：v2.3.9 这句仍是**静态断言**「当前按「默认城」计算」——
       //   而读者可能已在观测地总览页选过别的城（存档在 localStorage，服务端不知）。
       //   静态断言会让读者以为「我的选择被丢了」。故改为**待定态**：
       //   首屏先说「本页默认按 X 计算」，随后由 JS 按存档改写（JS 未启用／取数失败时，

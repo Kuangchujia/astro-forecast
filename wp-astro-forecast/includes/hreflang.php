@@ -20,9 +20,9 @@
  *
  * ── ★ 用户原稿为什么不能用（2026-09-24 校验结论）────────────────────
  *   用户给的三条示例：
- *     <link rel="alternate" hreflang="zh"       href="https://kuangchujia.com" />
- *     <link rel="alternate" hreflang="en"       href="https://kuangchujia.com" />
- *     <link rel="alternate" hreflang="x-default" href="https://kuangchujia.com" />
+ *     <link rel="alternate" hreflang="zh"       href="https://example.com" />
+ *     <link rel="alternate" hreflang="en"       href="https://example.com" />
+ *     <link rel="alternate" hreflang="x-default" href="https://example.com" />
  *   问题不在标签写法，在 **href 三条全同** —— 等于声明「中英两版都在同一个
  *   URL」，Google 会判定为**自指重复**并整体忽略该组，且可能反过来污染
  *   原页面的语言判定。**hreflang 是双向契约**：A 声明 B 是它的英文版，

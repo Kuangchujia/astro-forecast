@@ -125,7 +125,60 @@ function kcj_astro_schema_author() {
     );
 }
 
-/** 观测地节点（默认观测地：揭阳） */
+/**
+ * 结构化数据要用的「站点代表图」（通用实现，v2.3.32）。
+ *
+ * ★ 为什么改成这样：旧版把这张图**写死**成作者站点的 CDN 地址（一个具体域名 ＋ 图片路径）。
+ *   那条地址随源码发布 ⇒ 等于把一个具体站点的域名写进公开仓库，别人克隆后也指向那个站点。
+ *   v2.3.30 已把**地址块**改成通用实现；这一处是同一条规矩漏掉的最后一块。
+ *
+ * 取值三级，**不写任何具体 URL**：
+ *   ① 该页自己的特色图；② 首页（`page_on_front`）的特色图；③ 站点图标。
+ * 三级都空 ⇒ 返回空串。**调用方不得把空串写进 `image`** —— 空串会被判「填了但无效」，
+ *   比「未填写」更差，故另配 `kcj_astro_schema_prune_empty_image()` 做整键剔除。
+ *
+ * 站点要固定一张自己的图，挂 `kcj_astro_schema_image` 过滤器即可。
+ *
+ * @param int $post_id 0 = 不限页（按首页找）
+ * @return string 图片 URL 或空串
+ */
+function kcj_astro_schema_image($post_id = 0) {
+    $url = '';
+    if ($post_id) {
+        $url = (string) get_the_post_thumbnail_url($post_id, 'full');
+    }
+    if ($url === '') {
+        $front = (int) get_option('page_on_front');
+        if ($front > 0) {
+            $url = (string) get_the_post_thumbnail_url($front, 'full');
+        }
+    }
+    if ($url === '') {
+        $url = (string) get_site_icon_url(512);
+    }
+    return (string) apply_filters('kcj_astro_schema_image', $url, $post_id);
+}
+
+/**
+ * 把图值里的**空串**整键剔除（v2.3.32）。
+ *
+ * 为什么必须剔：`image: ""` 会被 Google 判「填了但无效」，比「未填写」更差
+ * （承 v2.3.17 的硬约束：宁可没有，不要填了无效）。
+ * 只处理**节点级** `image` —— 图值一律是顶层键，不做深层递归，免得误删同名业务字段。
+ */
+function kcj_astro_schema_prune_empty_image($nodes) {
+    if (!is_array($nodes)) {
+        return $nodes;
+    }
+    foreach ($nodes as $i => $n) {
+        if (is_array($n) && array_key_exists('image', $n) && $n['image'] === '') {
+            unset($nodes[$i]['image']);
+        }
+    }
+    return $nodes;
+}
+
+/** 观测地节点（默认观测地由 kcj_astro_default_place() 决定） */
 function kcj_astro_schema_place($city, $lat, $lon) {
     return array(
         '@type' => 'Place',
@@ -146,9 +199,11 @@ function kcj_astro_schema_place($city, $lat, $lon) {
 function kcj_astro_schema_daily($date_str, $data) {
     $url   = get_permalink() ?: home_url('/');
     $obs   = isset($data['observer']) ? $data['observer'] : array();
-    $city  = isset($obs['city']) ? $obs['city'] : '揭阳';
-    $lat   = isset($obs['lat']) ? $obs['lat'] : 23.35;
-    $lon   = isset($obs['lon']) ? $obs['lon'] : 116.36;
+    // ★ v2.3.32：兜底值改为与本树 `kcj_astro_default_place()`（北京）一致。
+    //   旧版兜底取的是**另一个城**的键值与坐标 —— 与本树的默认观测地不一致，属遗留。
+    $city  = isset($obs['city']) ? $obs['city'] : '北京';
+    $lat   = isset($obs['lat']) ? $obs['lat'] : 39.90;
+    $lon   = isset($obs['lon']) ? $obs['lon'] : 116.40;
     $nodes = array();
 
     if (kcj_astro_schema_should_emit('WebPage')) {
@@ -173,7 +228,7 @@ function kcj_astro_schema_daily($date_str, $data) {
         $nodes[] = array(
             '@type'             => 'Dataset',
             '@id'               => $url . '#dataset-' . $date_str,
-            'name'              => sprintf('揭阳每日天象数据集（%s）', $date_str),
+            'name'              => sprintf('%s每日天象数据集（%s）', $city, $date_str),
             'description'       => '含太阳与月球视位置、月相与月龄、五大行星视星等、二十八宿黄道宿度的每日预计算值。'
                                  . '计算方法与星历档在页面内逐条标注。',
             'creator'           => kcj_astro_schema_author(),
@@ -292,7 +347,7 @@ function kcj_astro_schema_collection($items) {
  *   故此处**不照抄后台文字**，而是声明「首页上确实看得见」的那两件资产。
  *   若日后首页删了这两条，本节点必须同删 —— 否则又是 F38 那种「架空声明」。
  *
- * ⚠ 与既有 `Dataset` 节点不冲突：那个是**每日天象数据集**（揭阳·逐日），
+ * ⚠ 与既有 `Dataset` 节点不冲突：那个是**每日天象数据集**（观测地·逐日），
  *   这两件是**历法数据集与预印本**，`@id` 各自带独立 fragment。
  *
  * @return array 两节点（ScholarlyArticle ＋ Dataset）
@@ -339,13 +394,15 @@ function kcj_astro_schema_front_assets($which = array()) {
     //     `CreativeWork`，`WebSite` 是其子类，ScholarlyArticle 本就在通过之列。
     $partof_ds = $home;
     $out = array();
-    // ★ v2.3.17（2026-09-25）：Google 富结果报这两件资产「未填写 image」。
-    //   修法＝取站点**已有且真实可访问**的那张 OG 图 —— 与本图内 #richSnippet 节点同源，
-    //   不新引任何外部资源。用 CDN 形态（i0.wp.com ... ?fit=1200%2C630），与图内既有
-    //   ImageObject 节点的 URL 形态保持一致，避免同一张图出现两种写法。
-    //   ⚠ 硬约束：图片必须是真实存在的资源 —— 不得填占位域（如 https://wp.com），
-    //     那会让「未填写」变成「填了但无效」，评分可能更低。
-    $og_image = 'https://i0.wp.com/kuangchujia.com/wp-content/uploads/2026/09/og-site-3.jpg?fit=1200%2C630&amp;ssl=1';
+    // ★ v2.3.17（2026-09-25）：Google 富结果报这两件资产「未填写 image」⇒ 必须补图。
+    // ◆ v2.3.32（2026-09-27）改法：**按站点自己的图取值，不写死任何具体地址**。
+    //   旧版把这张图写成作者站点的 CDN 地址（一个具体域名 ＋ 图片路径）；那条地址随源码
+    //   发布，等于把一个具体站点的域名写进公开仓库 —— v2.3.30 已把**地址块**改成通用
+    //   实现，这一处是同一条规矩漏掉的最后一块。现在改走 `kcj_astro_schema_image()`：
+    //   该页特色图 → 首页特色图 → 站点图标，三级取第一个非空，可挂过滤器固定自己的图。
+    //   ⚠ 硬约束不变：图片必须是真实存在的资源 —— 不得填占位域（如 https://wp.com），
+    //     那会从「未填写」变成「填了但无效」，评分反而更低；三级都空时**整键剔除**。
+    $og_image = kcj_astro_schema_image();
 
     // ① 预印本（002 · 换岁节点考据）
     if ($want('paper')) {
@@ -674,7 +731,7 @@ function kcj_astro_schema_nodes($context, $payload = array()) {
         case 'daily':
             // ★ 2026-09-23（F38）：date_str 取不到时**必须直接返回空**。
             //   原先无论 payload 是否为空都照建节点，于是在**首页、每一篇博文、老黄历承载页**
-            //   都输出了一个日期为空的 Dataset（线上实测值：name = 揭阳每日天象数据集（）、
+            //   都输出了一个日期为空的 Dataset（线上实测值：name = “〈观测地〉每日天象数据集（空）”、
             //   @id 以 `-` 结尾、temporalCoverage 缺失）—— 等于给「看不到该数据集」的页面
             //   声明数据集，违反本文件开头的硬约束「不得为不可见内容声明结构化数据」。
             if (empty($payload['date_str'])) {
@@ -727,6 +784,7 @@ function kcj_astro_schema_tag($nodes) {
     if (!$nodes) {
         return '';
     }
+    $nodes = kcj_astro_schema_prune_empty_image($nodes);
     $json = wp_json_encode(
         array('@context' => 'https://schema.org', '@graph' => array_values($nodes)),
         JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
@@ -762,6 +820,7 @@ add_filter('rank_math/json_ld', function ($data, $jsonld = null) {
     if (!$nodes) {
         return $data;
     }
+    $nodes = kcj_astro_schema_prune_empty_image($nodes);
     foreach ($nodes as $n) {
         $data[] = $n;
     }
@@ -1011,13 +1070,10 @@ function kcj_astro_schema_payload() {
         }
         // 语言：与站点 og:locale 同源，避免自造
         $lang = (strpos((string) get_bloginfo('language'), 'zh') === 0) ? 'zh-Hans' : 'en';
-        // 图片：取站点既有 OG 图（与首页两件资产**同一张**，不新引外部资源）。
+        // 图片：按站点自己的图取值（该页特色图 → 首页特色图 → 站点图标），见
+        //   `kcj_astro_schema_image()`。**不写死任何具体地址** ⇒ 谁装上都是自己的图。
         // ⚠ 硬约束：必须是真实可访问的资源 —— 不得填占位域。
-        $og = 'https://i0.wp.com/kuangchujia.com/wp-content/uploads/2026/09/og-site-3.jpg?fit=1200%2C630&ssl=1';
-        $img = get_the_post_thumbnail_url($post_id, 'full');
-        if (!$img) {
-            $img = $og;
-        }
+        $img = kcj_astro_schema_image($post_id);
         return array(
             'skip'    => kcj_astro_rankmath_emits_article_schema(),
             'article' => array(
@@ -1073,13 +1129,10 @@ function kcj_astro_schema_payload() {
         $self_slug = (string) get_post_field('post_name', $post_id);
         $is_en     = ($self_slug === 'en');
         $lang      = $is_en ? 'en' : 'zh-Hans';
-        // 图片：取站点既有 OG 图（与首页两件资产、文章页**同一张**，不新引外部资源）。
+        // 图片：按站点自己的图取值（该页特色图 → 首页特色图 → 站点图标），见
+        //   `kcj_astro_schema_image()`。**不写死任何具体地址** ⇒ 谁装上都是自己的图。
         // ⚠ 硬约束：必须是真实可访问的资源 —— 不得填占位域。
-        $og = 'https://i0.wp.com/kuangchujia.com/wp-content/uploads/2026/09/og-site-3.jpg?fit=1200%2C630&ssl=1';
-        $img = get_the_post_thumbnail_url($post_id, 'full');
-        if (!$img) {
-            $img = $og;
-        }
+        $img = kcj_astro_schema_image($post_id);
         // about：按**父页 slug**（栏目本体）推主题，不按当前页 slug 推 ——
         //   语言子页 slug 是 zh/en，推不出主题。父页命中不了时退化为站点主题。
         $anchor_slug = $self_slug;

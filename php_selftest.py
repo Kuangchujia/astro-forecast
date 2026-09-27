@@ -44,6 +44,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PLUGIN_DIR = os.path.join(HERE, "wp-astro-forecast")
 SKIP_DIRS = {".git", "__pycache__", "node_modules"}
 
+# ★ v2.3.32：桩里「站点特色图 / 站点图标」的默认取值。
+#   ⚠ 一律用 example.test 域 —— 判据要断言产物里**不得**出现作者站点域名。
+DEFAULT_FEATURED_IMG = "https://example.test/wp-content/uploads/og-cover.png"
+DEFAULT_SITE_ICON = "https://example.test/favicon.png"
+
 # ── PHP 桩：目的是让 rankmath.php 的顶层代码真的执行起来 ───────────────────────
 # 只实现 rankmath.php 实际调用到的那些 WordPress API，不做通用模拟。
 HARNESS = r"""<?php
@@ -177,6 +182,15 @@ function apply_filters($tag, $value) {
     }
     return $value;
 }
+/* ── ★ v2.3.32 新增：桩必须给出这三个 ─────────────────────────────────
+   插件自此按「该页特色图 → 首页特色图 → 站点图标」取 `image`，桩缺了它们，
+   front / front_addr_override 两个用例一跑就 Fatal（"Call to undefined function
+   get_option()"），于是「图片取值链」变成**测不了的代码** —— 与 v2.3.30 补
+   apply_filters 同源。取值由环境变量摆好，便于跑正 / 负两支。 */
+function get_option($k, $d = false) { return $k === 'page_on_front' ? (int) (getenv('KCJ_FRONT_PAGE') ?: 36) : $d; }
+function get_the_post_thumbnail_url($id = 0, $size = 'full') { $v = getenv('KCJ_FEATURED_IMG'); return $v === false ? '' : (string) $v; }
+function get_site_icon_url($size = 512) { $v = getenv('KCJ_SITE_ICON'); return $v === false ? '' : (string) $v; }
+
 function add_shortcode($tag, $cb) { $GLOBALS['kcj_shortcodes'][$tag] = $cb; return true; }
 
 /* ---- 查询上下文 ---- */
@@ -667,9 +681,14 @@ def lint(php, files):
     return results
 
 
-def run_case(php, harness, case, no_rankmath=False, now=None):
+def run_case(php, harness, case, no_rankmath=False, now=None,
+             featured_img=None, site_icon=None):
     env = dict(os.environ)
     env["KCJ_PLUGIN_DIR"] = PLUGIN_DIR
+    # ★ v2.3.32：站点代表图取值链的桩输入。None = 用默认值；
+    #   **空串** = 该级确实没有（走下一级回退）—— 负控制就是要摆这一支。
+    env["KCJ_FEATURED_IMG"] = DEFAULT_FEATURED_IMG if featured_img is None else featured_img
+    env["KCJ_SITE_ICON"] = DEFAULT_SITE_ICON if site_icon is None else site_icon
     if no_rankmath:
         env["KCJ_NO_RANKMATH"] = "1"
     else:
@@ -739,6 +758,9 @@ def main():
             fallback = {}
             for c in ("event", "collection", "daily"):
                 fallback[c] = run_case(php, harness, c, no_rankmath=True)
+            # ★ v2.3.32 负控制：站点既无特色图、也无站点图标 ⇒ 两件资产的 `image`
+            #   必须**整键消失**（留空串会被判「填了但无效」，比「未填写」更差）。
+            front_noimg = run_case(php, harness, "front", featured_img="", site_icon="")
 
             # ⑨ ★ v2.0.0：期间口径的**跨语言对拍**（PHP 真跑 ↔ Python 同一函数）。
             #   必须放在 try 块内 —— harness 在 finally 里就被删了，
@@ -1045,9 +1067,28 @@ def main():
                     f2.append("%s image 为空" % nm)
                 elif not im.lower().split("?")[0].endswith((".jpg", ".jpeg", ".png", ".webp")):
                     f2.append("%s image 不是图片路径：%r" % (nm, im))
-                elif "og-site-3.jpg" not in im:
-                    f2.append("%s image 与 #richSnippet 不同源：%r" % (nm, im))
-        chk("★ image 指向真实图片（非裸域占位）且两件同源", not f2, "; ".join(f2) or "两件同一张 OG 图")
+                elif im != DEFAULT_FEATURED_IMG:
+                    f2.append("%s image 与站点特色图不同源：%r（应 %r）"
+                              % (nm, im, DEFAULT_FEATURED_IMG))
+        chk("★ image 取自站点特色图（真实图片、两件同源，非写死地址）",
+            not f2, "; ".join(f2) or "两件同一张站点图")
+
+        # ★ v2.3.32 新增：全图序列化后**不得**出现写死的外部图片域。
+        #   为什么在序列化层查而不是在源码里查：源码检查会被「描述该判据的注释本身」
+        #   命中（自指悖论，本项目踩过两次）；查产物则没有这个面。
+        _ser = json.dumps(fr["graph"], ensure_ascii=False)
+        chk("★ 全图不含写死的外部图片域（i0.wp.com / 裸域占位）",
+            "i0.wp.com" not in _ser and "https://wp.com" not in _ser, _ser[:160])
+
+        # ★ v2.3.32 新增负控制：站点无图 ⇒ `image` 整键剔除。
+        #   这是「三级取值都空」这条分支唯一的观察面 —— 没有它，该分支等于没测。
+        _nb = []
+        for _t in ("ScholarlyArticle", "Dataset"):
+            for _n in types_of(front_noimg["graph"], _t):
+                if "image" in _n:
+                    _nb.append("%s 仍有 image 键：%r" % (_t, _n.get("image")))
+        chk("★ 负控制：站点无图时 image 整键剔除（不得留空串）",
+            not _nb, "; ".join(_nb) or "两件均无 image 键")
 
         # ⑦-b ★ v2.3.18：街道级地址必须从结构化数据里消失，其余一律保留。
         f3 = []
