@@ -175,7 +175,11 @@ function kcj_astro_schema_daily($date_str, $data) {
             'variableMeasured'  => $vars,
             'isAccessibleForFree' => true,
             'license'           => 'https://creativecommons.org/licenses/by/4.0/',
-            'isPartOf'          => array('@type' => 'WebPage', '@id' => $url . '#webpage'),
+            // ★ v2.3.31 第二处（2026-09-27 · 全站扫描查出）：本节点同样把 `isPartOf` 指向
+            //   `WebPage` 对象 ⇒ Google 的 Dataset 口径只收 `URL`／`Dataset`，同类告警。
+            //   同法＝**改写形态、不改指称对象**：仍指该日页面 `$url`，由对象改成 URL 串。
+            //   ⚠ 「页面能否作数据集的父容器」属语义问题，本轮**不改**（登记待裁）。
+            'isPartOf'          => $url,
         );
     }
     return $nodes;
@@ -309,12 +313,23 @@ function kcj_astro_schema_front_assets($which = array()) {
     );
     // 数据集的上级容器：原用 `#webpage`（＝当前页面），语义错位（页面不是数据集的父容器）。
     // 改指「站点」这一稳定容器，并内联 name／url。
+    // ⚠ v2.3.31（2026-09-27）：**这个 `$partof` 现只给 Article 家族用**；数据集节点改用
+    //   `$partof_ds`（同指称对象、URL 形态）—— 见下。
     $partof = array(
         '@type' => 'WebSite',
         '@id'   => $home . '#website',
         'name'  => '邝楚嘉 Chujia Kuang — Chinese Calendrics & Solar Terms',
         'url'   => $home,
     );
+    // ★ v2.3.31（2026-09-27 · 用户令「先解决这两个问题」）：Google 富结果报数据集节点
+    //   `字段"isPartOf"的对象类型无效`。判据＝Google《Dataset 结构化数据》原文：
+    //   `isPartOf` 取值**只接受 `URL` 或 `Dataset` 实例**。
+    //   ⚠ 修法是**改写形态、不改指称对象**：仍指站点根 `$home`，只是由对象改成 URL 串 ——
+    //     ① 语义零漂移；② **不内联一个新的 Dataset 节点**（那会在图里多出一个页面上
+    //     看不见的「父数据集」，违本插件的「不可见不声明」）。
+    //   ⚠ Article 家族那份 `$partof` 不动：Google 的 Article 口径里 `isPartOf` 期望
+    //     `CreativeWork`，`WebSite` 是其子类，ScholarlyArticle 本就在通过之列。
+    $partof_ds = $home;
     $out = array();
     // ★ v2.3.17（2026-09-25）：Google 富结果报这两件资产「未填写 image」。
     //   修法＝取站点**已有且真实可访问**的那张 OG 图 —— 与本图内 #richSnippet 节点同源，
@@ -372,7 +387,7 @@ function kcj_astro_schema_front_assets($which = array()) {
             'inLanguage'       => array('en', 'zh-Hans'),
             'creator'          => $who,
             'publisher'        => $pub,
-            'isPartOf'         => $partof,
+            'isPartOf'         => $partof_ds,
             'identifier'       => array(
                 '@type' => 'PropertyValue',
                 'propertyID' => 'DOI',
@@ -746,57 +761,87 @@ add_filter('rank_math/json_ld', function ($data, $jsonld = null) {
 }, 5, 2);
 
 /**
- * ★ v2.3.18（2026-09-25）：把「街道级地址」从结构化数据里滤掉。
+ * ★ v2.3.30（2026-09-27）：地址块改为**通用实现，源码内不含任何地址值**。
  *
- * 背景：Rank Math 的「知识图谱 / 个人」设置把 `PostalAddress` 整块输出到站点每一页的
- *   `@graph`（实测首页 / About / Papers / 典籍页各 1 处），其中 `streetAddress` 是
- *   **精确到门牌小区**的住址。结构化数据是**写给机器读的公开数据** —— 比页面上肉眼可见
- *   的文字更容易被采集与聚合，故只保留到「省 + 邮编 + 国别」，删掉街道层。
+ * 本目录是**对外发布树**。同号的站点版把地址六项**强制覆盖**为一组站点口径值
+ * （省／市／区／邮编）；那组值一旦随源码发布，等于把一个真实住地写进公开仓库。
+ * 它与「默认观测地」是**两回事** —— 后者是功能值、可中立化；前者是身份信息。
+ * 故本站版与本版**故意不同**：
  *
- * 为什么只删一个字段、其余一律保留：用户口径是「详细地址隐藏，其它可以公开」。
- *   故 `addressRegion`（广东）/ `postalCode` / `addressCountry`（中国）/ `email` /
- *   `telephone` 全部**原样保留**，`@type` 也保留（只去字段、不去节点类型）。
+ *   ① **本函数不写任何城市名、区名、邮编。**
+ *   ② **默认只删 `streetAddress` 一个键**（承 v2.3.18）：后台那个 `streetAddress` 是门牌小区级
+ *      真住址，删它是**与国别无关**的通用隐私保护；其余字段（`addressRegion`／`postalCode`／
+ *      `addressCountry` …）取自站点自己的设置，**原样保留**。
+ *   ③ **要固定输出，用 filter 自填**：
  *
- * 为什么用递归遍历而非定点改键：Rank Math 的 `@graph` 结构随版本与页面类型变化
- *   （首页 8 节点、非首页 6 节点，节点位置不确定），且地址块可能嵌在任意节点下。
- *   定点路径会在下次升级时**静默失效** ⇒ 改为「深度优先找所有带 streetAddress 的节点」。
+ *          add_filter('kcj_astro_schema_address', function ($addr, $node) {
+ *              return array(
+ *                  '@type'           => 'PostalAddress',
+ *                  'addressRegion'   => '…',
+ *                  'addressLocality' => '…',
+ *                  'postalCode'      => '…',
+ *                  'addressCountry'  => 'CN',
+ *              );
+ *          }, 10, 2);
  *
- * ⚠ 本过滤器只对 **Rank Math 的输出**生效。若日后本插件自己也输出地址，须另行处理。
- * ⚠ 这是**输出层过滤**，不改 Rank Math 的存储值 —— 后台设置里那个地址还在，
- *   只是不再进 `@graph`。若要从根上删除，须去 Rank Math 后台设置。
+ *      filter 返回非空数组 ⇒ 其键值**逐项覆盖**到地址节点；返回空数组（默认）⇒ 只走 ②。
+ *      **本插件不提供任何默认地址值**：不挂 filter 时，输出即站点后台原值（去掉门牌级）。
+ *
+ * ⚠ 这是**输出层**处理，不改 Rank Math 的存储值；只对 Rank Math 的输出生效。
+ * ⚠ 判据见 `php_selftest.py` 用例 `front` 的 ⑦-b：`streetAddress` 不得出现在产物里
+ *   （仅非地址节点的同名字段可留）、`addressRegion`／`postalCode`／`addressCountry` 三项原值原样在；
+ *   负控制：非地址节点（`Place`）的同名字段不得被改写、也不得被塞 `address` 键。
  *
  * @param array $data Rank Math 的 @graph 数组（每个元素是一个节点）
- * @return array 过滤后的数组
+ * @return array 处理后的数组
  */
 add_filter('rank_math/json_ld', function ($data) {
     if (!is_array($data)) {
         return $data;
     }
     foreach ($data as &$node) {
-        kcj_astro_schema_strip_street($node);
+        kcj_astro_schema_set_address($node);
     }
     unset($node);
     return $data;
 }, 99);
 
 /**
- * 递归删除节点（及其子节点）里的 `streetAddress` 键。
- * 只删这一个键：其余地址成分与节点类型全部保留。
+ * 递归：凡「地址节点」，删掉门牌级字段；若站点挂了 `kcj_astro_schema_address` filter，按其返回值覆盖。
+ * **本函数不含任何城市名、区名、邮编。**
+ *
+ * 地址节点的判定与 v2.3.18 同源（只认 `@type === 'PostalAddress'`，或「有 streetAddress 且无 @type」），
+ * 以免误伤同名业务字段（如 `Place.streetAddress`）。
  *
  * @param mixed $v 任意节点/子节点（引用传入，就地修改）
  * @return void
  */
-function kcj_astro_schema_strip_street(&$v) {
+function kcj_astro_schema_set_address(&$v) {
     if (!is_array($v)) {
         return;
     }
-    // 仅当该层是「地址节点」时才动它 —— 用 @type 判，避免误删同名业务字段。
     if ((isset($v['@type']) && $v['@type'] === 'PostalAddress')
         || (isset($v['streetAddress']) && !isset($v['@type']))) {
+        $v['@type'] = 'PostalAddress';
+        // ① 门牌级字段**一律先清** —— 这一条不因站点是否自填地址而豁免：
+        //    站点挂了 filter，交给它的也是「已清掉门牌级」的节点；站点若要显式恢复，
+        //    须在自己的返回数组里写上 streetAddress（那是站点的选择，非本插件默认）。
         unset($v['streetAddress']);
+        /**
+         * ② 站点自行固定地址块。返回空数组（默认）＝ 不覆盖，输出即站点后台原值（已去门牌级）。
+         *
+         * @param array $address 待覆盖的键值对；默认空数组
+         * @param array $node    当前地址节点的原值（门牌级字段已清）
+         */
+        $override = apply_filters('kcj_astro_schema_address', array(), $v);
+        if (is_array($override)) {
+            foreach ($override as $k => $val) {
+                $v[$k] = $val;
+            }
+        }
     }
     foreach ($v as &$child) {
-        kcj_astro_schema_strip_street($child);
+        kcj_astro_schema_set_address($child);
     }
     unset($child);
 }

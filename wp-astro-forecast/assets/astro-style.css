@@ -31,7 +31,6 @@
 
 .kcj-astro-h3, .kcj-astro-title { color: var(--kcj-cinnabar); }
 .kcj-astro-title { font-size: 24px; line-height: 1.4; }
-.kcj-astro-city { font-size: 13px; color: #888; margin-left: 8px; font-weight: normal; }
 
 /* 视觉隐藏（v2.3.0）：**只给视觉**，语义与读屏照旧。
    ★ 用途是「去重复但不丢大纲」：页面上「今日天象」原本出现三次（页面标题、栏目标头、
@@ -301,7 +300,6 @@
   line-height: 1.65;
   color: #7a736a;
 }
-.kcj-astro-city { font-size: 13px; font-weight: 400; color: var(--kcj-cinnabar); margin-left: 6px; }
 /* 状态行里的「仍改用 X」按钮（v2.3.5）：跨省提示时的**顺手出口**。
    ★ 提示不等于挡路 —— 读者读了提示知道怎么回事，仍想用得顺手就一步改过去。 */
 .kcj-astro-place-adopt {
@@ -523,7 +521,7 @@
   color: #333;
   margin: 1.4em 0;
 }
-.kcj-astro-history-intro, .kcj-astro-history .kcj-astro-intro { font-size: 13.5px; color: #777; }
+.kcj-astro-history .kcj-astro-intro { font-size: 13.5px; color: #777; }
 .kcj-astro-history-list { list-style: none; margin: 12px 0 0; padding: 0; }
 .kcj-astro-history-item {
   border-left: 3px solid var(--kcj-line);
@@ -846,4 +844,4 @@
 .kcj-astro-places-back:hover { color: var(--kcj-cinnabar); border-bottom-color: var(--kcj-cinnabar); }
 .kcj-astro-hub-title { margin: 0 0 10px; font-size: 16px; }
 
-/* kcj-astro-version: 2.3.26 */
+/* kcj-astro-version: 2.3.32 */

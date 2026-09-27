@@ -129,6 +129,24 @@ switch ($GLOBALS['kcj_case']) {
         $GLOBALS['kcj_content'] = '<ul><li>Preprint DOI 10.5281/zenodo.22803746</li>'
                                 . '<li>Datasets DOI 10.5281/zenodo.22788686</li></ul>';
         break;
+    case 'front_addr_override':
+        // ★ v2.3.30（正面用例）：与 front 同页，但站点挂 filter `kcj_astro_schema_address` 自填地址块。
+        //   为什么必须单开一例：本版把「固定输出地址」从源码移交给站点 filter，
+        //   若只测「默认删门牌级」而不测「filter 真能覆盖」，那条通路就是没测过的代码。
+        //   注入值一律用**假地名**（示例省／示例市），绝不把真实地名写进测试件。
+        $GLOBALS['kcj_pid']     = 36;
+        $GLOBALS['kcj_content'] = '<ul><li>Preprint DOI 10.5281/zenodo.22803746</li>'
+                                . '<li>Datasets DOI 10.5281/zenodo.22788686</li></ul>';
+        add_filter('kcj_astro_schema_address', function ($addr, $node) {
+            return [
+                '@type'           => 'PostalAddress',
+                'addressRegion'   => '示例省',
+                'addressLocality' => '示例市',
+                'postalCode'      => '000000',
+                'addressCountry'  => 'CN',
+            ];
+        }, 10, 2);
+        break;
     case 'bulk_upsert':
         // 只测导入器多行快路径（真跑 kcj_astro_rest_bulk_upsert），不依赖查询上下文。
         break;
@@ -140,18 +158,31 @@ switch ($GLOBALS['kcj_case']) {
 /* ---- 钩子收集 ---- */
 function add_filter($tag, $cb, $prio = 10, $args = 1) { $GLOBALS['kcj_hooks'][$tag][] = ['prio' => $prio, 'args' => $args, 'cb' => $cb]; return true; }
 function add_action($tag, $cb, $prio = 10, $args = 1) { return add_filter($tag, $cb, $prio, $args); }
+/* ★ v2.3.30 新增：桩必须给出 apply_filters —— 插件从此用它取「站点自填地址块」，
+   桩缺了它，那条通路一跑就 Fatal（"Call to undefined function apply_filters()"），
+   于是「站点用 filter 覆盖地址」变成**测不了的代码**。语义与 WP 一致：prio 升序、返回末值。 */
+function apply_filters($tag, $value) {
+    if (empty($GLOBALS['kcj_hooks'][$tag])) { return $value; }
+    $extra = array_slice(func_get_args(), 2);
+    $hs = $GLOBALS['kcj_hooks'][$tag];
+    usort($hs, function ($a, $b) { return $a['prio'] - $b['prio']; });
+    foreach ($hs as $h) {
+        $value = call_user_func_array($h['cb'], array_merge([$value], $extra));
+    }
+    return $value;
+}
 function add_shortcode($tag, $cb) { $GLOBALS['kcj_shortcodes'][$tag] = $cb; return true; }
 
 /* ---- 查询上下文 ---- */
 /* ★ 这里必须是**白名单式的字面清单**：新增 case 一律要登记，否则会被误判成
    「CPT 单篇」而走错分支（本轮 hub_page 就踩了：报出一堆与缺陷无关的错）。 */
-function is_singular($t = '') { $c = $GLOBALS['kcj_case']; if (in_array($c, ['collection', 'daily', 'daily_no_shortcode', 'hub_page', 'hub_page_today_off', 'front'], true)) { return false; } return $t === '' ? true : $t === KCJ_ASTRO_CPT; }
+function is_singular($t = '') { $c = $GLOBALS['kcj_case']; if (in_array($c, ['collection', 'daily', 'daily_no_shortcode', 'hub_page', 'hub_page_today_off', 'front', 'front_addr_override'], true)) { return false; } return $t === '' ? true : $t === KCJ_ASTRO_CPT; }
 function is_post_type_archive($t = '') { return $GLOBALS['kcj_case'] === 'collection' && $t === KCJ_ASTRO_CPT; }
 function is_tax($t = '') { return false; }
 /* ★ v2.3.18：首页单列一类（rankmath.php 的 context 三分支之一）。
    ⚠ 必须进 is_singular 的排除名单 —— 否则首页会被误判成 CPT 单篇，
      报出一堆与缺陷无关的错（v2.3.2 加 hub_page 时踩过同一个坑）。 */
-function is_front_page() { return $GLOBALS['kcj_case'] === 'front'; }
+function is_front_page() { return in_array($GLOBALS['kcj_case'], ['front', 'front_addr_override'], true); }
 
 /* ---- 文章 API ---- */
 function get_the_ID() { return (int) $GLOBALS['kcj_pid']; }
@@ -691,7 +722,7 @@ def main():
         try:
             for c in ("event", "event_with_rankmath_meta", "historical", "collection",
                       "daily", "daily_no_shortcode", "hub_page", "hub_page_today_off",
-                      "front"):
+                      "front", "front_addr_override"):
                 # ★ hub_page 的数据集日期取自 current_time('Y-m-d') ⇒ 必须钉住基准日，
                 #   否则断言「= 2026-09-23」会在跨日时假红（尤其是 00:00 前后）。
                 # ⚠ 第二次 run_case 只能写在**这个 try 块内** —— 桩在 finally 里就删了，
@@ -1070,6 +1101,35 @@ def main():
                 f4.append("回查残留位置失败：%r" % (ex,))
         chk("★ 负控制：同名但非邮政地址的业务字段不得误删（Place.streetAddress 应留 1 处）",
             not f4, "; ".join(f4) or "残留恰 1 处且落在 Place")
+
+        # ⑦-c ★ v2.3.30：正面用例 —— 站点挂 `kcj_astro_schema_address` filter 自填地址块。
+        #   v2.3.30 把「固定输出地址」的能力从源码移交给站点 filter（发布树不写地址值），
+        #   故须有这条：只测「默认删门牌级」而不测「filter 真能覆盖」，那条通路即「没测过的代码」。
+        fao = cases["front_addr_override"]
+        chk("★ 正面：挂 filter 后 context 仍为 front（首页分支不受 filter 影响）",
+            fao["context"] == "front", fao["context"])
+        g1 = []
+        _a2 = None
+        for n in fao["graph"]:
+            if n.get("@type") == "Person" and "address" in n:
+                _a2 = n["address"]
+                break
+        if _a2 is None:
+            g1.append("Person.address 不见了（filter 分支把节点删了？）")
+        else:
+            for k, v in (("addressRegion", "示例省"), ("addressLocality", "示例市"),
+                         ("postalCode", "000000"), ("addressCountry", "CN")):
+                if _a2.get(k) != v:
+                    g1.append("注入的 %s 未生效：%r（应 %r）" % (k, _a2.get(k), v))
+            # 门牌级字段**仍不得出现** —— 覆盖分支不豁免（先清后覆盖）
+            if "streetAddress" in _a2:
+                g1.append("覆盖分支下 streetAddress 漏出：%r（先清后覆盖，不得豁免）"
+                          % _a2.get("streetAddress"))
+            # 桩里「后台原值」（postalCode=552200）必须已被覆盖掉 —— 否则等于没覆盖
+            if _a2.get("postalCode") == "552200":
+                g1.append("postalCode 仍为桩内后台原值 552200 —— 覆盖未生效")
+        chk("★★ 正面：filter 返回值逐项覆盖到地址节点（且门牌级仍被清）",
+            not g1, "; ".join(g1) or "四项注入值全生效、streetAddress 无")
 
         # ⑧ 回退路径：Rank Math 未启用时，四类必须全由本插件出
         fb_ev = fallback["event"]

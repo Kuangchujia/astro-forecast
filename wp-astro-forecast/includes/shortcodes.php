@@ -48,7 +48,7 @@ add_action('wp_enqueue_scripts', function () {
         array(), KCJ_ASTRO_VER, true);
 });
 
-/** 默认观测地键与中文名（与 compute_sky.CONFIG.OBS_CITY_KEY 一致：揭阳） */
+/** 默认观测地键与中文名（与 compute_sky.CONFIG.OBS_CITY_KEY 一致：北京） */
 function kcj_astro_default_place() {
     return array('key' => 'beijing', 'cn' => '北京');
 }
@@ -222,7 +222,7 @@ function kcj_astro_notice($text, $cls = 'kcj-astro-nodata') {
  *   故本页选完城后写 localStorage（键 KCJ_PLACE_STORE）并**跳回来源页**。
  *
  * ★ 为什么不用伪静态 /observatories/<城市>/（用户意见④）：
- *   那会让 341 个城市各自成为一个**可索引 URL**，等于把「邝楚嘉在揭阳」结构化公开
+ *   那会让 341 个城市各自成为一个**可索引 URL**，等于把「作者常住地」结构化公开
  *   —— 与「不碰具体经济财务」「授权不授柄」及个人信息保护口径相悖。故本页只有一个 URL，
  *   城市选择**不进 URL**（与 v2.3.3「换城不换 URL」的纪律一致）。
  *
