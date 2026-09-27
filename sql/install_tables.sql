@@ -1,3 +1,9 @@
+-- ──────────────────────────────────────────────────────────────
+-- License (dual-track / 双轨制授权隔离)
+--   · Software code — MIT (see LICENSE).
+--   · Calculated calendrical data & outputs — CC BY 4.0 (see LICENSE-DATA).
+--   · Third-party material & exceptions — see NOTICE.md.
+-- ──────────────────────────────────────────────────────────────
 -- =============================================================================
 -- 天象预报模块 · 建表 SQL（交付物 A）
 -- 站点：kuangchujia.com ｜ 适用 WordPress 自定义表（前缀 wp_，可用变量替换）
