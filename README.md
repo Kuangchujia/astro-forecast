@@ -14,6 +14,8 @@
 - **发布面**：八个短代码、八个模板，覆盖「今日天象 / 未来预告 / 历史上今日 / 观测地 / 报告下载」。
 - **验证面**：六道校验闸门（含 PHP 语法闸与 WordPress 钩子桩测试），本机离线可跑。
 
+*An offline pre-computation engine for the Chinese calendar and historical astronomy, shipped with a WordPress publishing plugin. Astronomy and rendering are cut apart completely: every astronomical quantity is computed locally in Python and stored as data, then imported in batches over REST endpoints; the WordPress plugin reads only its own tables — **no real-time computation on the front end**. It is built for a non-technical author who wants to publish Chinese calendrical and astronomical material steadily on WordPress, so the point is not algorithmic display but getting astronomical data onto the site reliably — and being able to find out when something is wrong. Kernel: Skyfield + JPL DE421 (solar terms, eclipses, planetary conjunctions, oppositions, stations and retrogradations, greatest elongations, lunar phases and ages, meteor-shower maxima, sunrise/sunset and twilight). Data layer: four custom tables, batched REST import, a column whitelist and composite de-duplication keys. Publishing layer: eight shortcodes and eight templates. Verification layer: six self-check gates, runnable offline. Code MIT · data CC BY 4.0.*
+
 <!-- badges -->
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22950007.svg)](https://doi.org/10.5281/zenodo.22950007) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Data: CC BY 4.0](https://img.shields.io/badge/Data-CC%20BY%204.0-lightgrey.svg)](LICENSE-DATA) [![ORCID](https://img.shields.io/badge/ORCID-0009--0002--7650--833X-a6ce39.svg)](https://orcid.org/0009-0002-7650-833X) [![OpenAlex](https://img.shields.io/badge/OpenAlex-A5151908354-ff6f00.svg)](https://openalex.org/A5151908354) [![Site](https://img.shields.io/badge/site-kuangchujia.com-blue.svg)](https://kuangchujia.com)
@@ -184,7 +186,7 @@ astro-forecast/
 ```bash
 python python/compute_sky.py --selftest        # 预期：通过 31 项
 python verify_package.py                       # 预期：通过 497 项
-python php_selftest.py                         # 预期：通过 48 项
+python php_selftest.py                         # 预期：通过 59 项
 python python/build_dataset.py --selftest      # 预期：通过 51 项
 python python/event_almanac.py --selftest      # 预期：通过 228 项
 python python/event_almanac.py --verify        # 预期：对拍 57/57
