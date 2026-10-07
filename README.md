@@ -233,6 +233,7 @@ KCJ_WP_USER=<用户名> KCJ_WP_APP_PASSWORD='<应用程序密码>' \
 
 - **作者**：邝楚嘉（Chujia Kuang）｜ ORCID [0009-0002-7650-833X](https://orcid.org/0009-0002-7650-833X) ｜ OpenAlex [A5151908354](https://openalex.org/A5151908354) ｜ 总入口 <https://kuangchujia.com>
 - **配套数据集**：历法公共数据集（二十四节气交节时刻／历代历法改革年表／干支纪日对照表），Zenodo concept DOI [10.5281/zenodo.22788686](https://doi.org/10.5281/zenodo.22788686) ｜ 仓库 <https://github.com/Kuangchujia/chinese-calendar-dataset>
+- **OSF 镜像节点**（开放研究镜像 · open research mirror）：<https://osf.io/3wvkh/>
 - **代码**：MIT，见 [`LICENSE`](LICENSE)。
 - **数据与文档**：CC BY 4.0，见 [`LICENSE-DATA`](LICENSE-DATA)。
 - **星历**：`de421.bsp` 来自 JPL，**不在本仓库内**，请遵循 JPL 自身条款。
